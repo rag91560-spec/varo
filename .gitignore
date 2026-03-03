@@ -1,0 +1,14 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+*.pyc
+__pycache__/
+data/*.db
+data/*.db-wal
+data/*.db-shm
+.env
+.env.local
+*.exe
+*.dll
