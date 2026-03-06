@@ -112,3 +112,14 @@ export function getProvider(id: string): ProviderInfo | undefined {
 
 /** Providers that need API keys (for settings page) */
 export const KEY_PROVIDERS = PROVIDERS.filter((p) => p.needsKey)
+
+/** Provider IDs used in presets (simplified — backend resolves claude variants) */
+export const PRESET_PROVIDER_IDS = ["", "claude", "openai", "gemini", "deepseek", "offline", "offline_hq"] as const
+
+/** Static display names for preset providers */
+export const PRESET_PROVIDER_NAMES: Record<string, string> = {
+  claude: "Claude",
+  openai: "GPT-4o",
+  gemini: "Gemini",
+  deepseek: "DeepSeek",
+}

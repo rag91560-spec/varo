@@ -23,16 +23,21 @@ function getSystemTheme(): "dark" | "light" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("dark")
-  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("dark")
+function getInitialTheme(): Theme {
+  if (typeof window === "undefined") return "dark"
+  try {
+    const saved = localStorage.getItem("gt-theme")
+    if (saved === "dark" || saved === "light" || saved === "system") return saved
+  } catch { /* SSR / restricted access */ }
+  return "dark"
+}
 
-  useEffect(() => {
-    const saved = localStorage.getItem("gt-theme") as Theme | null
-    if (saved === "dark" || saved === "light" || saved === "system") {
-      setThemeState(saved)
-    }
-  }, [])
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(getInitialTheme)
+  const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">(() => {
+    const initial = getInitialTheme()
+    return initial === "system" ? getSystemTheme() : initial
+  })
 
   useEffect(() => {
     const resolved = theme === "system" ? getSystemTheme() : theme

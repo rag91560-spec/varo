@@ -2,7 +2,36 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { api } from "@/lib/api"
-import type { Game, TranslationProgress, Settings } from "@/lib/types"
+import { getLocale, translations } from "@/lib/i18n"
+import type { TranslationKey } from "@/lib/i18n"
+import type { Game, TranslationProgress, Settings, LicenseStatus } from "@/lib/types"
+
+/** Resolve SSE message: prefer message_key (i18n) over raw message string.
+ *  Reads current locale at call time so it stays in sync after locale changes. */
+function _resolveSSEMessage(data: Record<string, unknown>): string {
+  const key = data.message_key as string | undefined
+  if (key) {
+    const keyMap: Record<string, TranslationKey> = {
+      tm_cache_applied: "tmCacheApplied",
+      tm_cache_all_applied: "tmCacheAllApplied",
+      tm_saved: "tmSaved",
+      tm_save_failed: "tmSaveFailed",
+    }
+    const tKey = keyMap[key]
+    if (tKey) {
+      const locale = getLocale()
+      let msg = translations[locale]?.[tKey] ?? translations.ko[tKey] ?? tKey
+      const args = data.message_args as Record<string, unknown> | undefined
+      if (args) {
+        for (const [k, v] of Object.entries(args)) {
+          msg = msg.replace(`{${k}}`, String(v))
+        }
+      }
+      return msg
+    }
+  }
+  return (data.message as string) || ""
+}
 
 // --- useGames ---
 
@@ -10,19 +39,25 @@ export function useGames(search?: string) {
   const [games, setGames] = useState<Game[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError("")
     try {
-      const data = await api.games.list(search)
+      const data = await api.games.list(debouncedSearch)
       setGames(data)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load games")
     } finally {
       setLoading(false)
     }
-  }, [search])
+  }, [debouncedSearch])
 
   useEffect(() => {
     refresh()
@@ -90,6 +125,46 @@ export function useSettings() {
   return { settings, loading, refresh, save }
 }
 
+// --- useLicenseStatus ---
+
+export function useLicenseStatus() {
+  const [license, setLicense] = useState<LicenseStatus>({ valid: false, plan: "", is_admin: false, verified_at: "" })
+  const [loading, setLoading] = useState(true)
+  const licenseRef = useRef(license)
+  licenseRef.current = license
+
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.license.status()
+      setLicense(data)
+    } catch {
+      // License check failed - stay invalid
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const verify = useCallback(async () => {
+    setLoading(true)
+    try {
+      const data = await api.license.verify()
+      setLicense(data)
+      return data
+    } catch {
+      return licenseRef.current
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    refresh()
+  }, [refresh])
+
+  return { license, loading, refresh, verify }
+}
+
 // --- useTranslationProgress (SSE) ---
 
 export function useTranslationProgress(gameId: number | null) {
@@ -101,6 +176,8 @@ export function useTranslationProgress(gameId: number | null) {
   const [status, setStatus] = useState<string>("idle")
   const [message, setMessage] = useState("")
   const eventSourceRef = useRef<EventSource | null>(null)
+  const retryCountRef = useRef(0)
+  const MAX_RETRIES = 3
 
   const connect = useCallback(() => {
     if (gameId === null) return
@@ -117,41 +194,68 @@ export function useTranslationProgress(gameId: number | null) {
     setStatus("connecting")
 
     es.addEventListener("progress", (e) => {
-      const data = JSON.parse(e.data)
-      setProgress(data)
-      setStatus(data.status || "running")
-      if (data.message) setMessage(data.message)
+      try {
+        const data = JSON.parse(e.data)
+        if (data && typeof data.progress === "number") {
+          retryCountRef.current = 0
+          setProgress(data)
+          setStatus(data.status || "running")
+          const msg = _resolveSSEMessage(data)
+          if (msg) setMessage(msg)
+        }
+      } catch { /* ignore malformed SSE data */ }
     })
 
     es.addEventListener("complete", (e) => {
-      const data = JSON.parse(e.data)
-      setProgress(data)
+      try {
+        const data = JSON.parse(e.data)
+        if (data) {
+          setProgress(data)
+          const msg = _resolveSSEMessage(data)
+          if (msg) setMessage(msg)
+        }
+      } catch { /* ignore */ }
+      retryCountRef.current = 0
       setStatus("completed")
       es.close()
     })
 
     es.addEventListener("error", (e) => {
       if (e instanceof MessageEvent) {
-        const data = JSON.parse(e.data)
-        setMessage(data.message || "Error")
+        try {
+          const data = JSON.parse(e.data)
+          const msg = _resolveSSEMessage(data)
+          setMessage(msg || "Error")
+        } catch { /* ignore */ }
       }
+      retryCountRef.current = 0
       setStatus("error")
       es.close()
     })
 
     es.addEventListener("cancelled", () => {
+      retryCountRef.current = 0
       setStatus("cancelled")
       es.close()
     })
 
     es.addEventListener("heartbeat", () => {
-      // Keep alive
+      retryCountRef.current = 0
     })
 
     es.onerror = () => {
-      // SSE connection error (server might not be streaming)
       es.close()
-      setStatus("idle")
+      eventSourceRef.current = null
+      if (retryCountRef.current < MAX_RETRIES) {
+        retryCountRef.current++
+        const delay = 2000 * retryCountRef.current
+        setTimeout(() => {
+          if (gameId !== null) connect()
+        }, delay)
+      } else {
+        retryCountRef.current = 0
+        setStatus("idle")
+      }
     }
   }, [gameId])
 

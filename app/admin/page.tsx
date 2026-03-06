@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { useLocale } from "@/hooks/use-locale"
 import {
   ShieldCheckIcon,
   UsersIcon,
@@ -10,10 +11,12 @@ import {
   Loader2Icon,
   RefreshCwIcon,
   XCircleIcon,
+  HashIcon,
+  LanguagesIcon,
+  DatabaseIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { useLocale } from "@/hooks/use-locale"
 import { api } from "@/lib/api"
 import type { AdminUser, AdminGame } from "@/lib/types"
 
@@ -42,7 +45,7 @@ export default function AdminPage() {
       const res = await api.sync.adminUsers()
       setUsers(res.users)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "데이터를 불러올 수 없습니다.")
+      setError(err instanceof Error ? err.message : t("loadFailed"))
     } finally {
       setLoading(false)
     }
@@ -52,54 +55,66 @@ export default function AdminPage() {
     loadUsers()
   }, [loadUsers])
 
-  const toggleUser = useCallback(async (userId: number) => {
-    if (expandedUser === userId) {
-      setExpandedUser(null)
-      return
-    }
-    setExpandedUser(userId)
-    if (!userGames[userId]) {
-      setLoadingGames(userId)
-      try {
-        const res = await api.sync.adminUserGames(userId)
-        setUserGames((prev) => ({ ...prev, [userId]: res.games }))
-      } catch {
-        // ignore
-      } finally {
-        setLoadingGames(null)
+  const toggleUser = useCallback(
+    async (userId: number) => {
+      if (expandedUser === userId) {
+        setExpandedUser(null)
+        return
       }
-    }
-  }, [expandedUser, userGames])
+      setExpandedUser(userId)
+      if (!userGames[userId]) {
+        setLoadingGames(userId)
+        try {
+          const res = await api.sync.adminUserGames(userId)
+          setUserGames((prev) => ({ ...prev, [userId]: res.games }))
+        } catch {
+          /* ignore */
+        } finally {
+          setLoadingGames(null)
+        }
+      }
+    },
+    [expandedUser, userGames]
+  )
+
+  const totalUsers = users.length
+  const totalGames = users.reduce((s, u) => s + u.game_count, 0)
+  const totalStrings = users.reduce((s, u) => s + u.total_strings, 0)
+  const totalTM = users.reduce((s, u) => s + u.tm_count, 0)
 
   // Permission denied
   if (error?.includes("403") || error?.includes("권한")) {
     return (
       <div className="flex flex-col items-center justify-center h-full min-h-[60vh] gap-3">
         <XCircleIcon className="size-12 text-text-tertiary" />
-        <p className="text-text-secondary">관리자 권한이 없습니다</p>
-        <p className="text-xs text-text-tertiary">설정에서 관리자 라이선스 키를 입력하세요</p>
+        <p className="text-text-secondary">{t("adminNoPermission")}</p>
+        <p className="text-xs text-text-tertiary">
+          {t("adminNoPermissionHint")}
+        </p>
       </div>
     )
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold text-text-primary tracking-tight flex items-center gap-2">
             <ShieldCheckIcon className="size-6 text-accent" />
-            {t("admin")}
+            {t("adminTitle")}
           </h1>
           <p className="text-sm text-text-secondary mt-1">
-            사용자 동기화 데이터 및 번역 현황
+            {t("adminDesc")}
           </p>
         </div>
         <Button variant="secondary" size="sm" onClick={loadUsers} loading={loading}>
           <RefreshCwIcon className="size-4" />
-          새로고침
+          {t("refresh")}
         </Button>
       </div>
 
+      {/* Loading state */}
       {loading && users.length === 0 ? (
         <div className="flex items-center justify-center py-20">
           <Loader2Icon className="size-8 text-accent animate-spin" />
@@ -109,45 +124,53 @@ export default function AdminPage() {
           <CardContent className="p-6 text-center">
             <p className="text-text-secondary">{error}</p>
             <Button variant="secondary" size="sm" onClick={loadUsers} className="mt-3">
-              다시 시도
+              {t("tryAgain")}
             </Button>
           </CardContent>
         </Card>
       ) : (
         <>
-          {/* Summary stats */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* Stats cards */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: "총 사용자", value: users.length },
               {
-                label: "총 게임",
-                value: users.reduce((s, u) => s + u.game_count, 0),
+                icon: UsersIcon,
+                label: t("totalUsers"),
+                value: totalUsers.toLocaleString(),
+                highlight: true,
               },
               {
-                label: "총 문자열",
-                value: users
-                  .reduce((s, u) => s + u.total_strings, 0)
-                  .toLocaleString(),
+                icon: GamepadIcon,
+                label: t("totalGamesCount"),
+                value: totalGames.toLocaleString(),
+                highlight: false,
               },
               {
-                label: "총 번역",
-                value: users
-                  .reduce((s, u) => s + u.total_translated, 0)
-                  .toLocaleString(),
+                icon: HashIcon,
+                label: t("totalTranslatedStrings"),
+                value: totalStrings.toLocaleString(),
+                highlight: false,
+              },
+              {
+                icon: DatabaseIcon,
+                label: t("totalTmEntries"),
+                value: totalTM.toLocaleString(),
+                highlight: false,
               },
             ].map((stat) => (
               <div
                 key={stat.label}
-                className="rounded-lg p-4 text-center"
-                style={{
-                  background: "rgba(255,255,255,0.02)",
-                  border: "1px solid rgba(255,255,255,0.06)",
-                }}
+                className="rounded-lg p-4 text-center bg-overlay-2 border border-overlay-6"
               >
-                <p className="text-xs text-text-tertiary">{stat.label}</p>
-                <p className="text-lg font-bold text-text-primary mt-1">
-                  {stat.value}
+                <stat.icon className="size-4 text-text-tertiary mx-auto mb-2" />
+                <p className="text-2xl font-bold text-text-primary">
+                  {stat.highlight ? (
+                    <span className="text-accent">{stat.value}</span>
+                  ) : (
+                    stat.value
+                  )}
                 </p>
+                <p className="text-xs text-text-tertiary mt-1">{stat.label}</p>
               </div>
             ))}
           </div>
@@ -157,7 +180,7 @@ export default function AdminPage() {
             <div className="flex items-center gap-2 mb-3">
               <UsersIcon className="size-5 text-accent" />
               <h2 className="text-base font-semibold text-text-primary">
-                사용자 ({users.length})
+                {t("users")} ({users.length})
               </h2>
             </div>
 
@@ -170,13 +193,11 @@ export default function AdminPage() {
                 <div key={user.id}>
                   <button
                     onClick={() => toggleUser(user.id)}
-                    className="w-full rounded-lg p-4 text-left transition-all duration-150"
-                    style={{
-                      background: isExpanded
-                        ? "rgba(91,94,240,0.06)"
-                        : "rgba(255,255,255,0.02)",
-                      border: `1px solid ${isExpanded ? "rgba(91,94,240,0.15)" : "rgba(255,255,255,0.06)"}`,
-                    }}
+                    className={`w-full rounded-lg p-4 text-left transition-all duration-150 border ${
+                      isExpanded
+                        ? "bg-accent/5 border-accent/15"
+                        : "bg-overlay-2 border-overlay-6 hover:bg-overlay-6"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       {isExpanded ? (
@@ -191,21 +212,27 @@ export default function AdminPage() {
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-text-tertiary">버전</p>
+                          <p className="text-xs text-text-tertiary">{t("version")}</p>
                           <p className="text-sm text-text-primary font-mono">
                             {user.app_version || "-"}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-text-tertiary">게임</p>
+                          <p className="text-xs text-text-tertiary">{t("games")}</p>
                           <p className="text-sm text-text-primary font-bold">
                             {user.game_count}
                           </p>
                         </div>
                         <div className="text-center">
-                          <p className="text-xs text-text-tertiary">번역률</p>
+                          <p className="text-xs text-text-tertiary">{t("translationRate")}</p>
                           <p
-                            className={`text-sm font-bold ${rate >= 80 ? "text-accent" : rate > 0 ? "text-yellow-400" : "text-text-tertiary"}`}
+                            className={`text-sm font-bold ${
+                              rate >= 80
+                                ? "text-accent"
+                                : rate > 0
+                                  ? "text-yellow-400"
+                                  : "text-text-tertiary"
+                            }`}
                           >
                             {rate}%
                           </p>
@@ -223,12 +250,7 @@ export default function AdminPage() {
 
                   {/* Expanded: user's games */}
                   {isExpanded && (
-                    <div
-                      className="ml-7 mt-1 rounded-lg overflow-hidden"
-                      style={{
-                        border: "1px solid rgba(255,255,255,0.04)",
-                      }}
-                    >
+                    <div className="ml-7 mt-1 rounded-lg overflow-hidden border border-overlay-6">
                       {loadingGames === user.id ? (
                         <div className="flex items-center justify-center py-8">
                           <Loader2Icon className="size-5 text-accent animate-spin" />
@@ -236,40 +258,28 @@ export default function AdminPage() {
                       ) : games && games.length > 0 ? (
                         <table className="w-full text-sm">
                           <thead>
-                            <tr
-                              style={{
-                                background: "rgba(255,255,255,0.03)",
-                                borderBottom:
-                                  "1px solid rgba(255,255,255,0.06)",
-                              }}
-                            >
+                            <tr className="bg-overlay-2 border-b border-overlay-6">
                               <th className="text-left px-4 py-2 text-xs text-text-tertiary font-medium">
-                                게임
+                                {t("games")}
                               </th>
                               <th className="text-center px-3 py-2 text-xs text-text-tertiary font-medium">
-                                엔진
+                                {t("engineLabel")}
                               </th>
                               <th className="text-center px-3 py-2 text-xs text-text-tertiary font-medium">
-                                진행도
+                                {t("progressLabel")}
                               </th>
                               <th className="text-center px-3 py-2 text-xs text-text-tertiary font-medium">
-                                상태
+                                {t("status")}
                               </th>
                             </tr>
                           </thead>
                           <tbody>
                             {games.map((g) => {
-                              const gPct = pct(
-                                g.translated_count,
-                                g.string_count
-                              )
+                              const gPct = pct(g.translated_count, g.string_count)
                               return (
                                 <tr
                                   key={g.id}
-                                  style={{
-                                    borderBottom:
-                                      "1px solid rgba(255,255,255,0.03)",
-                                  }}
+                                  className="border-b border-overlay-6 last:border-b-0"
                                 >
                                   <td className="px-4 py-2.5">
                                     <div className="flex items-center gap-2">
@@ -284,7 +294,7 @@ export default function AdminPage() {
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
                                     <div className="flex items-center gap-2 justify-center">
-                                      <div className="w-16 h-1.5 bg-surface-elevated rounded-full overflow-hidden">
+                                      <div className="w-16 h-1.5 bg-overlay-6 rounded-full overflow-hidden">
                                         <div
                                           className="h-full bg-accent rounded-full"
                                           style={{ width: `${gPct}%` }}
@@ -297,21 +307,13 @@ export default function AdminPage() {
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
                                     <span
-                                      className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                                      style={{
-                                        background:
-                                          g.status === "applied"
-                                            ? "rgba(52,199,89,0.15)"
-                                            : g.status === "translated"
-                                              ? "rgba(91,94,240,0.15)"
-                                              : "rgba(255,255,255,0.04)",
-                                        color:
-                                          g.status === "applied"
-                                            ? "#34C759"
-                                            : g.status === "translated"
-                                              ? "#5b5ef0"
-                                              : "#9898a3",
-                                      }}
+                                      className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                                        g.status === "applied"
+                                          ? "bg-green-500/15 text-green-400"
+                                          : g.status === "translated"
+                                            ? "bg-accent/15 text-accent"
+                                            : "bg-overlay-6 text-text-tertiary"
+                                      }`}
                                     >
                                       {g.status || "idle"}
                                     </span>
@@ -323,7 +325,7 @@ export default function AdminPage() {
                         </table>
                       ) : (
                         <div className="py-6 text-center text-xs text-text-tertiary">
-                          등록된 게임이 없습니다
+                          {t("noGamesRegistered")}
                         </div>
                       )}
                     </div>
@@ -336,7 +338,7 @@ export default function AdminPage() {
               <div className="py-12 text-center">
                 <UsersIcon className="size-10 text-text-tertiary/30 mx-auto" />
                 <p className="text-sm text-text-tertiary mt-3">
-                  아직 동기화된 사용자가 없습니다
+                  {t("noSyncedUsers")}
                 </p>
               </div>
             )}

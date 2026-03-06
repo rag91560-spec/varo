@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback, useEffect, useMemo } from "react"
 import {
   SlidersHorizontalIcon,
   PlusIcon,
@@ -15,25 +15,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useLocale } from "@/hooks/use-locale"
 import { api } from "@/lib/api"
+import { PRESET_PROVIDER_IDS, PRESET_PROVIDER_NAMES } from "@/lib/providers"
+import { appConfirm } from "@/lib/utils"
 import type { TranslationPreset, ReferencePair } from "@/lib/types"
 
-const PROVIDERS = [
-  { id: "", name: "기본값 사용" },
-  { id: "claude", name: "Claude" },
-  { id: "openai", name: "GPT-4o" },
-  { id: "gemini", name: "Gemini" },
-  { id: "deepseek", name: "DeepSeek" },
-  { id: "offline", name: "오프라인 (NLLB)" },
-  { id: "offline_hq", name: "오프라인 HQ" },
-]
-
-const TONES = [
-  { id: "", name: "기본 (자연스러운 번역)" },
-  { id: "formal", name: "격식체" },
-  { id: "casual", name: "반말" },
-  { id: "literary", name: "문학체" },
-  { id: "game_ui", name: "게임 UI (간결)" },
-]
+const TONE_IDS = ["", "formal", "casual", "literary", "game_ui"] as const
 
 const EMPTY_PRESET: Omit<TranslationPreset, "id" | "created_at" | "updated_at"> = {
   name: "",
@@ -48,13 +34,40 @@ const EMPTY_PRESET: Omit<TranslationPreset, "id" | "created_at" | "updated_at"> 
   reference_pairs_json: "[]",
 }
 
+// Parse glossary for display
+function parseGlossary(json: string): Array<[string, string]> {
+  try {
+    const obj = JSON.parse(json)
+    return Object.entries(obj) as Array<[string, string]>
+  } catch { return [] }
+}
+
+// Parse reference pairs
+function parseReferencePairs(json: string): ReferencePair[] {
+  try {
+    const arr = JSON.parse(json)
+    return Array.isArray(arr) ? arr : []
+  } catch { return [] }
+}
+
 export default function PresetsPage() {
   const { t } = useLocale()
+
+  const PROVIDERS = useMemo(() => PRESET_PROVIDER_IDS.map((id) => ({
+    id,
+    name: id === "" ? t("useDefault") : id === "offline" ? t("offlineNllb") : id === "offline_hq" ? t("offlineHq") : PRESET_PROVIDER_NAMES[id] || id,
+  })), [t])
+  const TONES = useMemo(() => TONE_IDS.map((id) => ({
+    id,
+    name: id === "" ? t("toneDefault") : id === "formal" ? t("toneFormal") : id === "casual" ? t("toneCasual") : id === "literary" ? t("toneLiterary") : t("toneGameUi"),
+  })), [t])
+
   const [presets, setPresets] = useState<TranslationPreset[]>([])
   const [loading, setLoading] = useState(true)
   const [editingId, setEditingId] = useState<number | "new" | null>(null)
   const [form, setForm] = useState(EMPTY_PRESET)
   const [saving, setSaving] = useState(false)
+  const [errorMsg, setErrorMsg] = useState("")
 
   const loadPresets = useCallback(async () => {
     setLoading(true)
@@ -69,11 +82,13 @@ export default function PresetsPage() {
   useEffect(() => { loadPresets() }, [loadPresets])
 
   const handleNew = () => {
+    setErrorMsg("")
     setForm({ ...EMPTY_PRESET })
     setEditingId("new")
   }
 
   const handleEdit = (preset: TranslationPreset) => {
+    setErrorMsg("")
     setForm({
       name: preset.name,
       game_id: preset.game_id,
@@ -90,8 +105,9 @@ export default function PresetsPage() {
   }
 
   const handleDuplicate = (preset: TranslationPreset) => {
+    setErrorMsg("")
     setForm({
-      name: `${preset.name} (복사)`,
+      name: `${preset.name} (${t("copy")})`,
       game_id: preset.game_id,
       engine: preset.engine,
       provider: preset.provider,
@@ -107,6 +123,21 @@ export default function PresetsPage() {
 
   const handleSave = useCallback(async () => {
     if (!form.name.trim()) return
+
+    // Validate glossary JSON
+    if (form.glossary_json && form.glossary_json.trim() !== "{}") {
+      try {
+        const parsed = JSON.parse(form.glossary_json)
+        if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+          setErrorMsg("Glossary must be a JSON object (e.g. {\"key\": \"value\"})")
+          return
+        }
+      } catch {
+        setErrorMsg("Invalid glossary JSON format")
+        return
+      }
+    }
+
     setSaving(true)
     try {
       if (editingId === "new") {
@@ -115,39 +146,29 @@ export default function PresetsPage() {
         await api.presets.update(editingId, form)
       }
       setEditingId(null)
+      setErrorMsg("")
       loadPresets()
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Save failed")
+    } finally {
       setSaving(false)
     }
   }, [form, editingId, loadPresets])
 
   const handleDelete = useCallback(async (id: number) => {
-    if (!confirm("이 프리셋을 삭제하시겠습니까?")) return
+    if (!(await appConfirm(t("confirmDeletePreset")))) return
     try {
       await api.presets.delete(id)
       loadPresets()
-    } catch { /* ignore */ }
-  }, [loadPresets])
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Delete failed")
+    }
+  }, [loadPresets, t])
 
   const handleCancel = () => {
     setEditingId(null)
     setForm(EMPTY_PRESET)
-  }
-
-  // Parse glossary for display
-  const parseGlossary = (json: string): Array<[string, string]> => {
-    try {
-      const obj = JSON.parse(json)
-      return Object.entries(obj) as Array<[string, string]>
-    } catch { return [] }
-  }
-
-  // Parse reference pairs
-  const parseReferencePairs = (json: string): ReferencePair[] => {
-    try {
-      const arr = JSON.parse(json)
-      return Array.isArray(arr) ? arr : []
-    } catch { return [] }
+    setErrorMsg("")
   }
 
   const referencePairs = parseReferencePairs(form.reference_pairs_json)
@@ -176,23 +197,33 @@ export default function PresetsPage() {
             {t("presets")}
           </h1>
           <p className="text-sm text-text-secondary mt-1">
-            번역 설정을 프리셋으로 저장하여 재사용하세요
+            {t("presetsDescription")}
           </p>
         </div>
         <Button variant="default" size="sm" onClick={handleNew}>
           <PlusIcon className="size-4" />
-          새 프리셋
+          {t("newPreset")}
         </Button>
       </div>
 
+      {/* Error Message */}
+      {errorMsg && (
+        <div className="flex items-center justify-between rounded-lg px-4 py-2.5 text-sm text-error bg-error/10 border border-error/20">
+          <span>{errorMsg}</span>
+          <button onClick={() => setErrorMsg("")} className="text-error/60 hover:text-error transition-colors ml-2 shrink-0">
+            <XIcon className="size-3.5" />
+          </button>
+        </div>
+      )}
+
       {/* Edit/Create Form */}
       {editingId !== null && (
-        
+
           <Card className="bg-surface">
             <CardContent className="p-5 space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-text-primary">
-                  {editingId === "new" ? "새 프리셋" : "프리셋 편집"}
+                  {editingId === "new" ? t("newPreset") : t("editPreset")}
                 </h3>
                 <button onClick={handleCancel} className="text-text-tertiary hover:text-text-primary transition-colors">
                   <XIcon className="size-4" />
@@ -202,13 +233,13 @@ export default function PresetsPage() {
               {/* Name */}
               <div>
                 <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                  프리셋 이름 *
+                  {t("presetName")}
                 </label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="예: RPG Maker 일본어 → 한국어"
+                  placeholder={t("presetNamePlaceholder")}
                   className="w-full h-11 px-3 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                 />
               </div>
@@ -217,7 +248,7 @@ export default function PresetsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                    번역 제공자
+                    {t("translationProvider")}
                   </label>
                   <select
                     value={form.provider}
@@ -231,13 +262,13 @@ export default function PresetsPage() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                    모델 (선택사항)
+                    {t("modelOptional")}
                   </label>
                   <input
                     type="text"
                     value={form.model}
                     onChange={(e) => setForm({ ...form, model: e.target.value })}
-                    placeholder="기본 모델 사용"
+                    placeholder={t("useDefaultModel")}
                     className="w-full h-10 px-3 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent/50"
                   />
                 </div>
@@ -247,27 +278,27 @@ export default function PresetsPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                    번역 톤
+                    {t("translationTone")}
                   </label>
                   <select
                     value={form.tone}
                     onChange={(e) => setForm({ ...form, tone: e.target.value })}
                     className="w-full h-10 px-3 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-accent/50"
                   >
-                    {TONES.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
+                    {TONES.map((tone) => (
+                      <option key={tone.id} value={tone.id}>{tone.name}</option>
                     ))}
                   </select>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                    엔진 필터 (선택사항)
+                    {t("engineFilter")}
                   </label>
                   <input
                     type="text"
                     value={form.engine}
                     onChange={(e) => setForm({ ...form, engine: e.target.value })}
-                    placeholder="모든 엔진"
+                    placeholder={t("allEngines")}
                     className="w-full h-10 px-3 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
                   />
                 </div>
@@ -276,17 +307,17 @@ export default function PresetsPage() {
               {/* Instructions */}
               <div>
                 <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                  번역 지시사항
+                  {t("translationInstructions")}
                 </label>
                 <textarea
                   value={form.instructions}
                   onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-                  placeholder="예: 반말로 번역해줘, 캐릭터 이름은 원문 유지, 존댓말 사용..."
+                  placeholder={t("instructionsPlaceholder")}
                   rows={3}
                   className="w-full px-3 py-2.5 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm resize-none focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                 />
                 <p className="text-[10px] text-text-tertiary mt-1">
-                  AI 번역 시 참고할 추가 지시사항을 자유롭게 입력하세요
+                  {t("instructionsHelp")}
                 </p>
               </div>
 
@@ -294,7 +325,7 @@ export default function PresetsPage() {
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider">
-                    번역 예시 (레퍼런스)
+                    {t("referenceExamples")}
                   </label>
                   <button
                     type="button"
@@ -302,7 +333,7 @@ export default function PresetsPage() {
                     className="flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
                   >
                     <PlusIcon className="size-3" />
-                    추가
+                    {t("add")}
                   </button>
                 </div>
                 {referencePairs.length === 0 ? (
@@ -311,7 +342,7 @@ export default function PresetsPage() {
                     onClick={addReferencePair}
                     className="w-full py-3 rounded-lg border border-dashed border-border text-xs text-text-tertiary hover:border-accent/50 hover:text-text-secondary transition-all"
                   >
-                    원문 → 번역 예시를 추가하면 AI가 스타일을 참고합니다
+                    {t("referenceEmptyHint")}
                   </button>
                 ) : (
                   <div className="space-y-2">
@@ -321,7 +352,7 @@ export default function PresetsPage() {
                           type="text"
                           value={pair.source}
                           onChange={(e) => updateReferencePair(i, "source", e.target.value)}
-                          placeholder="원문 (예: お兄ちゃん、大好き！)"
+                          placeholder={t("sourcePlaceholder")}
                           className="flex-1 h-9 px-2.5 rounded-md border border-border bg-surface-elevated text-text-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent/50"
                         />
                         <span className="text-text-tertiary text-xs mt-2 shrink-0">→</span>
@@ -329,7 +360,7 @@ export default function PresetsPage() {
                           type="text"
                           value={pair.target}
                           onChange={(e) => updateReferencePair(i, "target", e.target.value)}
-                          placeholder="번역 (예: 오빠, 좋아해!)"
+                          placeholder={t("targetPlaceholder")}
                           className="flex-1 h-9 px-2.5 rounded-md border border-border bg-surface-elevated text-text-primary text-xs font-mono focus:outline-none focus:ring-2 focus:ring-accent/50"
                         />
                         <button
@@ -348,7 +379,7 @@ export default function PresetsPage() {
               {/* Glossary */}
               <div>
                 <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                  용어집 (JSON)
+                  {t("glossaryJson")}
                 </label>
                 <textarea
                   value={form.glossary_json}
@@ -361,13 +392,18 @@ export default function PresetsPage() {
 
               {/* Use TM */}
               <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.use_memory}
+                  onChange={(e) => setForm({ ...form, use_memory: e.target.checked })}
+                  className="sr-only peer"
+                />
                 <div
-                  className="size-5 rounded-[6px] border flex items-center justify-center transition-all"
-                  style={{
-                    background: form.use_memory ? "rgba(91,94,240,0.15)" : "transparent",
-                    borderColor: form.use_memory ? "#5b5ef0" : "rgba(245,245,245,0.15)",
-                  }}
-                  onClick={() => setForm({ ...form, use_memory: !form.use_memory })}
+                  className={`size-5 rounded-[6px] border flex items-center justify-center transition-all pointer-events-none ${
+                    form.use_memory
+                      ? "bg-accent/15 border-accent"
+                      : "bg-transparent border-overlay-12"
+                  }`}
                 >
                   {form.use_memory && (
                     <svg viewBox="0 0 12 12" className="size-3 text-accent" fill="none" stroke="currentColor" strokeWidth="2">
@@ -375,22 +411,22 @@ export default function PresetsPage() {
                     </svg>
                   )}
                 </div>
-                <span className="text-sm text-text-primary">번역 메모리 사용</span>
+                <span className="text-sm text-text-primary">{t("useTranslationMemory")}</span>
               </label>
 
               {/* Save/Cancel */}
               <div className="flex gap-2 pt-2">
                 <Button variant="default" size="sm" onClick={handleSave} loading={saving} className="flex-1">
                   <SaveIcon className="size-4" />
-                  저장
+                  {t("save")}
                 </Button>
                 <Button variant="ghost" size="sm" onClick={handleCancel}>
-                  취소
+                  {t("cancel")}
                 </Button>
               </div>
             </CardContent>
           </Card>
-        
+
       )}
 
       {/* Presets List */}
@@ -401,16 +437,18 @@ export default function PresetsPage() {
       ) : presets.length === 0 && editingId === null ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <SlidersHorizontalIcon className="size-16 text-text-tertiary mb-4" />
-          <p className="text-text-secondary font-medium">프리셋이 없습니다</p>
-          <p className="text-sm text-text-tertiary mt-1">번역 설정을 프리셋으로 저장해 재사용하세요</p>
+          <p className="text-text-secondary font-medium">{t("noPresets")}</p>
+          <p className="text-sm text-text-tertiary mt-1">{t("noPresetsHint")}</p>
           <Button variant="default" size="sm" className="mt-4" onClick={handleNew}>
-            <PlusIcon className="size-4" /> 새 프리셋
+            <PlusIcon className="size-4" /> {t("newPreset")}
           </Button>
         </div>
       ) : (
         <div className="space-y-3">
-          {presets.map((preset) => (
-            
+          {presets.map((preset) => {
+            const refPairs = parseReferencePairs(preset.reference_pairs_json || "[]")
+            const glossary = parseGlossary(preset.glossary_json)
+            return (
               <Card key={preset.id} className="bg-surface">
                 <CardContent className="p-4">
                   <div className="flex items-start justify-between">
@@ -422,16 +460,16 @@ export default function PresetsPage() {
                             TM
                           </span>
                         )}
-                        {parseReferencePairs(preset.reference_pairs_json || "[]").length > 0 && (
+                        {refPairs.length > 0 && (
                           <span className="px-2 py-0.5 rounded-[6px] bg-emerald-500/10 text-emerald-400 text-[10px] font-medium">
-                            예시 {parseReferencePairs(preset.reference_pairs_json || "[]").length}
+                            {t("example")} {refPairs.length}
                           </span>
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5">
                         {preset.provider && (
                           <span className="text-xs text-text-secondary">
-                            제공자: {PROVIDERS.find(p => p.id === preset.provider)?.name || preset.provider}
+                            {t("providerLabel")}: {PROVIDERS.find(p => p.id === preset.provider)?.name || preset.provider}
                           </span>
                         )}
                         {preset.model && (
@@ -439,26 +477,26 @@ export default function PresetsPage() {
                         )}
                         {preset.tone && (
                           <span className="text-xs text-text-secondary">
-                            톤: {TONES.find(t => t.id === preset.tone)?.name || preset.tone}
+                            {t("toneLabel")}: {TONES.find(tn => tn.id === preset.tone)?.name || preset.tone}
                           </span>
                         )}
                         {preset.engine && (
-                          <span className="text-xs text-text-tertiary">엔진: {preset.engine}</span>
+                          <span className="text-xs text-text-tertiary">{t("engineLabel")}: {preset.engine}</span>
                         )}
                       </div>
                       {preset.instructions && (
                         <p className="text-xs text-text-tertiary mt-1 line-clamp-2">{preset.instructions}</p>
                       )}
-                      {parseGlossary(preset.glossary_json).length > 0 && (
+                      {glossary.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
-                          {parseGlossary(preset.glossary_json).slice(0, 5).map(([k, v]) => (
+                          {glossary.slice(0, 5).map(([k, v]) => (
                             <span key={k} className="px-1.5 py-0.5 rounded-[4px] bg-surface-elevated text-[10px] text-text-secondary font-mono">
                               {k}→{v}
                             </span>
                           ))}
-                          {parseGlossary(preset.glossary_json).length > 5 && (
+                          {glossary.length > 5 && (
                             <span className="text-[10px] text-text-tertiary">
-                              +{parseGlossary(preset.glossary_json).length - 5}
+                              +{glossary.length - 5}
                             </span>
                           )}
                         </div>
@@ -467,21 +505,21 @@ export default function PresetsPage() {
                     <div className="flex items-center gap-1 ml-3 shrink-0">
                       <button
                         onClick={() => handleDuplicate(preset)}
-                        title="복제"
+                        title={t("duplicate")}
                         className="size-8 flex items-center justify-center rounded-[8px] text-text-tertiary hover:text-text-primary hover:bg-surface-elevated transition-all"
                       >
                         <CopyIcon className="size-3.5" />
                       </button>
                       <button
                         onClick={() => handleEdit(preset)}
-                        title="편집"
+                        title={t("edit")}
                         className="size-8 flex items-center justify-center rounded-[8px] text-text-tertiary hover:text-text-primary hover:bg-surface-elevated transition-all"
                       >
                         <EditIcon className="size-3.5" />
                       </button>
                       <button
                         onClick={() => handleDelete(preset.id)}
-                        title="삭제"
+                        title={t("delete")}
                         className="size-8 flex items-center justify-center rounded-[8px] text-text-tertiary hover:text-error hover:bg-error/5 transition-all"
                       >
                         <Trash2Icon className="size-3.5" />
@@ -490,8 +528,8 @@ export default function PresetsPage() {
                   </div>
                 </CardContent>
               </Card>
-            
-          ))}
+            )
+          })}
         </div>
       )}
     </div>

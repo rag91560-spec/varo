@@ -10,8 +10,14 @@ export function SyncWorker() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    const doSync = () => {
-      api.sync.push().catch(() => {})
+    const doSync = async () => {
+      try {
+        const license = await api.license.status()
+        if (!license.valid) return
+        await api.sync.push()
+      } catch {
+        // Silently ignore — offline or no license
+      }
     }
 
     // Initial sync after delay

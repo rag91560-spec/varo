@@ -15,6 +15,7 @@ import {
   SlidersHorizontalIcon,
   DatabaseIcon,
   ShieldCheckIcon,
+  DownloadIcon,
 } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -22,6 +23,8 @@ import { useTheme } from "@/hooks/use-theme"
 import type { Theme } from "@/hooks/use-theme"
 import { useLocale } from "@/hooks/use-locale"
 import type { TranslationKey } from "@/hooks/use-locale"
+import { api } from "@/lib/api"
+import type { SdkSetupProgress } from "@/lib/types"
 
 interface NavItem {
   readonly labelKey: TranslationKey
@@ -37,6 +40,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { labelKey: "translationMemory", href: "/memory", icon: DatabaseIcon, group: "tools" },
   { labelKey: "models", href: "/models", icon: BrainCircuitIcon, group: "tools" },
   { labelKey: "settings", href: "/settings", icon: SettingsIcon, group: "system" },
+  { labelKey: "download", href: "/download", icon: DownloadIcon, group: "system" },
   { labelKey: "admin", href: "/admin", icon: ShieldCheckIcon, group: "system" },
 ]
 
@@ -62,15 +66,66 @@ function TranslatorLogo({ className }: { readonly className?: string }) {
   )
 }
 
+function useSdkAutoSetup() {
+  const [progress, setProgress] = React.useState<SdkSetupProgress | null>(null)
+
+  React.useEffect(() => {
+    let cancelled = false
+    let eventSource: EventSource | null = null
+
+    async function check() {
+      try {
+        const status = await api.android.sdkStatus()
+        if (cancelled || status.installed) return
+
+        // Trigger auto-setup (fire-and-forget, safe to call multiple times)
+        await api.android.autoSetup()
+
+        // Connect SSE for progress
+        eventSource = new EventSource(api.android.setupStatusUrl())
+        eventSource.addEventListener("status", (e) => {
+          if (cancelled) return
+          try {
+            const data: SdkSetupProgress = JSON.parse(e.data)
+            setProgress(data)
+            if (data.status === "completed" || data.status === "failed" || data.status === "cancelled") {
+              eventSource?.close()
+              eventSource = null
+              // Clear progress after a short delay on completion
+              if (data.status === "completed") {
+                setTimeout(() => { if (!cancelled) setProgress(null) }, 3000)
+              }
+            }
+          } catch { /* ignore parse errors */ }
+        })
+        eventSource.onerror = () => {
+          eventSource?.close()
+          eventSource = null
+        }
+      } catch {
+        // Backend not reachable yet — ignore
+      }
+    }
+
+    check()
+    return () => {
+      cancelled = true
+      eventSource?.close()
+    }
+  }, [])
+
+  return progress
+}
+
 export function Sidebar() {
   const pathname = usePathname()
   const { t, locale, toggleLocale } = useLocale()
   const { theme, setTheme } = useTheme()
   const [isElectron, setIsElectron] = React.useState(false)
+  const sdkProgress = useSdkAutoSetup()
 
   React.useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).electronAPI?.isElectron) {
+    if (window.electronAPI?.isElectron) {
       setIsElectron(true)
     }
   }, [])
@@ -118,6 +173,8 @@ export function Sidebar() {
     )
   }
 
+  const showSdkProgress = sdkProgress && sdkProgress.status !== "completed" && sdkProgress.status !== "idle"
+
   return (
     <aside className={cn(
       "flex flex-col shrink-0 sticky top-0 h-screen bg-sidebar-bg border-r border-border-subtle",
@@ -146,7 +203,7 @@ export function Sidebar() {
         {/* Tools separator */}
         <div className="mx-3 md:mx-4 my-3 h-px bg-border-subtle" />
         <div className="hidden md:block px-4 mb-1.5">
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">도구</span>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-text-tertiary">{t("tools")}</span>
         </div>
         <div className="px-1.5 md:px-2.5 space-y-0.5">
           {toolItems.map(renderNavItem)}
@@ -158,6 +215,26 @@ export function Sidebar() {
           {systemItems.map(renderNavItem)}
         </div>
       </nav>
+
+      {/* SDK setup progress */}
+      {showSdkProgress && (
+        <div className="shrink-0 px-2 pb-2 hidden md:block">
+          <div className="text-[10px] text-text-tertiary truncate">
+            {sdkProgress.status === "failed"
+              ? `Setup failed: ${sdkProgress.error ?? "unknown"}`
+              : sdkProgress.step_detail}
+          </div>
+          <div className="h-1 bg-overlay-4 rounded mt-1">
+            <div
+              className={cn(
+                "h-full rounded transition-all duration-300",
+                sdkProgress.status === "failed" ? "bg-red-500" : "bg-accent"
+              )}
+              style={{ width: `${Math.max(sdkProgress.progress, 1)}%` }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Bottom controls */}
       <div className="shrink-0 border-t border-border-subtle">

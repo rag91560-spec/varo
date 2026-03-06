@@ -22,13 +22,15 @@ import {
   CardDescription,
   CardContent,
 } from "@/components/ui/card"
+import { Paywall } from "@/components/ui/paywall"
 import { useLocale } from "@/hooks/use-locale"
-import { useSettings } from "@/hooks/use-api"
+import { useSettings, useLicenseStatus } from "@/hooks/use-api"
 import { KEY_PROVIDERS } from "@/lib/providers"
 
 export default function SettingsPage() {
   const { t } = useLocale()
   const { settings, loading, save } = useSettings()
+  const { license, verify: verifyLicense, loading: licenseLoading, refresh: refreshLicense } = useLicenseStatus()
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
   const [expandedGuide, setExpandedGuide] = useState<Record<string, boolean>>({})
   const [keys, setKeys] = useState<Record<string, string>>({})
@@ -37,26 +39,32 @@ export default function SettingsPage() {
   const [defaultLang, setDefaultLang] = useState("ja")
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState("")
   const [licenseKey, setLicenseKey] = useState("")
 
   // Load settings into local state
   useEffect(() => {
     if (!loading && settings) {
-      const apiKeys = settings.api_keys ?? {}
-      if (typeof apiKeys === "object") {
-        setKeys(apiKeys as Record<string, string>)
+      const rawKeys = settings.api_keys
+      if (rawKeys && typeof rawKeys === "object" && !Array.isArray(rawKeys)) {
+        setKeys(rawKeys)
+      } else if (typeof rawKeys === "string") {
+        try { setKeys(JSON.parse(rawKeys)) } catch { /* malformed */ }
       }
-      if (Array.isArray(settings.scan_directories)) {
-        setScanDirs(settings.scan_directories as string[])
+      const rawDirs = settings.scan_directories
+      if (Array.isArray(rawDirs)) {
+        setScanDirs(rawDirs)
+      } else if (typeof rawDirs === "string") {
+        try { setScanDirs(JSON.parse(rawDirs)) } catch { /* malformed */ }
       }
-      if (settings.default_provider) {
-        setDefaultProvider(settings.default_provider as string)
+      if (typeof settings.default_provider === "string") {
+        setDefaultProvider(settings.default_provider)
       }
-      if (settings.default_source_lang) {
-        setDefaultLang(settings.default_source_lang as string)
+      if (typeof settings.default_source_lang === "string") {
+        setDefaultLang(settings.default_source_lang)
       }
-      if (settings.license_key) {
-        setLicenseKey(settings.license_key as string)
+      if (typeof settings.license_key === "string") {
+        setLicenseKey(settings.license_key)
       }
     }
   }, [loading, settings])
@@ -67,18 +75,33 @@ export default function SettingsPage() {
 
   const handleSave = useCallback(async () => {
     setSaving(true)
+    setSaveError("")
+
+    // Validate license key format (allow empty or XXXX-XXXX-... pattern)
+    const trimmedKey = licenseKey.trim()
+    if (trimmedKey && !/^[A-Za-z0-9-]{8,}$/.test(trimmedKey)) {
+      setSaveError("Invalid license key format")
+      setSaving(false)
+      setTimeout(() => setSaveError(""), 5000)
+      return
+    }
+
+    // Filter out empty scan directories
+    const filteredDirs = scanDirs.filter((d) => d.trim() !== "")
+
     try {
       await save({
         api_keys: JSON.stringify(keys),
-        scan_directories: JSON.stringify(scanDirs),
+        scan_directories: JSON.stringify(filteredDirs),
         default_provider: defaultProvider,
         default_source_lang: defaultLang,
-        license_key: licenseKey,
+        license_key: trimmedKey,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
-    } catch {
-      // ignore
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : t("saveFailed"))
+      setTimeout(() => setSaveError(""), 5000)
     } finally {
       setSaving(false)
     }
@@ -91,7 +114,7 @@ export default function SettingsPage() {
           {t("settings")}
         </h1>
         <p className="text-sm text-text-secondary mt-1">
-          API 키 및 번역 설정을 관리하세요
+          {t("settingsDescription")}
         </p>
       </div>
 
@@ -100,7 +123,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <SettingsIcon className="size-5 text-accent" />
-            일반
+            {t("general")}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -111,7 +134,7 @@ export default function SettingsPage() {
               {t("licenseKey")}
             </label>
             <p className="text-[11px] text-text-tertiary mb-2">
-              라이선스 키를 입력하면 데이터 동기화 및 관리 기능을 사용할 수 있습니다
+              {t("licenseKeyDescription")}
             </p>
             <div className="relative">
               <input
@@ -119,6 +142,7 @@ export default function SettingsPage() {
                 placeholder="XXXX-XXXX-XXXX-XXXX"
                 value={licenseKey}
                 onChange={(e) => setLicenseKey(e.target.value)}
+                autoComplete="off"
                 className="w-full h-10 px-3 pr-10 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
               />
               <button
@@ -132,6 +156,26 @@ export default function SettingsPage() {
                 )}
               </button>
             </div>
+            <div className="flex items-center gap-2 mt-2">
+              {license.valid ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-success/15 text-success text-xs font-medium">
+                  <CheckIcon className="size-3" />
+                  {t("licenseValid")}
+                  {license.plan && <span className="text-success/70">({license.plan})</span>}
+                </span>
+              ) : licenseKey ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-error/15 text-error text-xs font-medium">
+                  {t("licenseInvalid")}
+                </span>
+              ) : null}
+              <button
+                onClick={() => verifyLicense()}
+                disabled={licenseLoading || !licenseKey}
+                className="text-xs text-accent hover:text-accent/80 disabled:text-text-tertiary disabled:cursor-not-allowed transition-colors"
+              >
+                {licenseLoading ? t("licenseVerifying") : t("licenseVerify")}
+              </button>
+            </div>
           </div>
 
           <div className="h-px bg-border" />
@@ -140,7 +184,7 @@ export default function SettingsPage() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                기본 번역 제공자
+                {t("defaultProvider")}
               </label>
               <select
                 value={defaultProvider}
@@ -156,16 +200,16 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="text-xs font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
-                기본 소스 언어
+                {t("defaultSourceLang")}
               </label>
               <select
                 value={defaultLang}
                 onChange={(e) => setDefaultLang(e.target.value)}
                 className="w-full h-10 px-3 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-accent/50"
               >
-                <option value="ja">일본어</option>
-                <option value="en">영어</option>
-                <option value="zh">중국어</option>
+                <option value="ja">{t("japanese")}</option>
+                <option value="en">{t("english")}</option>
+                <option value="zh">{t("chinese")}</option>
               </select>
             </div>
           </div>
@@ -173,13 +217,14 @@ export default function SettingsPage() {
       </Card>
 
       {/* API Keys */}
+      <Paywall show={!license.valid} onLicenseVerified={refreshLicense}>
       <div>
         <div className="flex items-center gap-2 mb-3">
           <KeyIcon className="size-5 text-accent" />
-          <h2 className="text-lg font-semibold text-text-primary">API 키</h2>
+          <h2 className="text-lg font-semibold text-text-primary">{t("apiKeys")}</h2>
         </div>
         <p className="text-sm text-text-secondary mb-4">
-          AI 번역에 사용할 API 키를 설정하세요. 무료 크레딧이 있는 제공자도 있습니다.
+          {t("apiKeysDescription")}
         </p>
 
         <div className="space-y-3">
@@ -228,6 +273,7 @@ export default function SettingsPage() {
                         [provider.id]: e.target.value,
                       }))
                     }
+                    autoComplete="off"
                     className="w-full h-11 px-3 pr-10 rounded-lg border border-border bg-surface-elevated text-text-primary text-sm font-mono placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
                   />
                   <button
@@ -252,7 +298,7 @@ export default function SettingsPage() {
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] text-xs font-medium text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
                     >
                       <ExternalLinkIcon className="size-3.5" />
-                      키 발급
+                      {t("getKey")}
                     </a>
                   )}
                   {provider.keyGuide && (
@@ -260,7 +306,7 @@ export default function SettingsPage() {
                       onClick={() => setExpandedGuide((prev) => ({ ...prev, [provider.id]: !prev[provider.id] }))}
                       className="inline-flex items-center gap-1 px-3 py-1.5 rounded-[10px] text-xs font-medium text-text-secondary hover:text-text-primary bg-surface-elevated hover:bg-overlay-6 transition-colors"
                     >
-                        가이드
+                        {t("guide")}
                       <ChevronDownIcon className={`size-3 transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                     </button>
                   )}
@@ -289,16 +335,17 @@ export default function SettingsPage() {
           })}
         </div>
       </div>
+      </Paywall>
 
       {/* Scan Directories */}
       <Card className="bg-surface">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FolderSearchIcon className="size-5 text-accent" />
-            게임 폴더 스캔 경로
+            {t("scanDirectories")}
           </CardTitle>
           <CardDescription>
-            게임이 설치된 루트 폴더를 설정하면 자동 스캔할 수 있습니다
+            {t("scanDirectoriesDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -320,7 +367,7 @@ export default function SettingsPage() {
                 onClick={() => setScanDirs(scanDirs.filter((_, j) => j !== i))}
                 className="shrink-0 text-text-tertiary"
               >
-                삭제
+                {t("delete")}
               </Button>
             </div>
           ))}
@@ -329,7 +376,7 @@ export default function SettingsPage() {
             size="sm"
             onClick={() => setScanDirs([...scanDirs, ""])}
           >
-            경로 추가
+            {t("addPath")}
           </Button>
         </CardContent>
       </Card>
@@ -345,7 +392,7 @@ export default function SettingsPage() {
         {saved ? (
           <>
             <CheckIcon className="size-4" />
-            저장됨
+            {t("saved")}
           </>
         ) : (
           <>
@@ -354,6 +401,9 @@ export default function SettingsPage() {
           </>
         )}
       </Button>
+      {saveError && (
+        <p className="text-xs text-red-400 text-center mt-2">{saveError}</p>
+      )}
     </div>
   )
 }

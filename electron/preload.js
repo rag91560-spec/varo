@@ -8,15 +8,24 @@ contextBridge.exposeInMainWorld("electronAPI", {
   downloadUpdate: () => ipcRenderer.invoke("download-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),
   onUpdateAvailable: (cb) => {
-    ipcRenderer.on("update-available", (_, data) => cb(data))
-    return () => ipcRenderer.removeAllListeners("update-available")
+    const handler = (_, data) => cb(data)
+    ipcRenderer.on("update-available", handler)
+    return () => ipcRenderer.removeListener("update-available", handler)
   },
   onUpdateProgress: (cb) => {
-    ipcRenderer.on("update-progress", (_, data) => cb(data))
-    return () => ipcRenderer.removeAllListeners("update-progress")
+    const handler = (_, data) => cb(data)
+    ipcRenderer.on("update-progress", handler)
+    return () => ipcRenderer.removeListener("update-progress", handler)
   },
   onUpdateDownloaded: (cb) => {
-    ipcRenderer.on("update-downloaded", () => cb())
-    return () => ipcRenderer.removeAllListeners("update-downloaded")
+    const handler = () => cb()
+    ipcRenderer.on("update-downloaded", handler)
+    return () => ipcRenderer.removeListener("update-downloaded", handler)
   },
+  selectApkFile: () => ipcRenderer.invoke("select-apk-file"),
+  selectApkFolder: () => ipcRenderer.invoke("select-apk-folder"),
+  selectSubtitleFiles: () => ipcRenderer.invoke("select-subtitle-files"),
+  openHtmlGame: (opts) => ipcRenderer.invoke("open-html-game", opts),
+  closeHtmlGame: (opts) => ipcRenderer.invoke("close-html-game", opts),
+  showConfirm: (message) => ipcRenderer.invoke("show-confirm-dialog", message),
 })

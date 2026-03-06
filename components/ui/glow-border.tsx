@@ -80,12 +80,17 @@ export function GlowBorder({
   React.useEffect(() => {
     if (!isHovered && showOnlyOnHover) return
 
-    const animate = () => {
-      draw()
+    // Only loop rAF while hovered; otherwise draw once
+    if (isHovered) {
+      const animate = () => {
+        draw()
+        animRef.current = requestAnimationFrame(animate)
+      }
       animRef.current = requestAnimationFrame(animate)
+      return () => cancelAnimationFrame(animRef.current)
+    } else {
+      draw()
     }
-    animRef.current = requestAnimationFrame(animate)
-    return () => cancelAnimationFrame(animRef.current)
   }, [isHovered, showOnlyOnHover, draw])
 
   const handleMouseMove = React.useCallback((e: React.MouseEvent) => {

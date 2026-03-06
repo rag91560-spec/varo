@@ -16,6 +16,7 @@ import { useLocale } from "@/hooks/use-locale"
 import { useGames } from "@/hooks/use-api"
 import { api } from "@/lib/api"
 import type { TMEntry, TMStats } from "@/lib/types"
+import { appConfirm } from "@/lib/utils"
 
 export default function MemoryPage() {
   const { t } = useLocale()
@@ -26,6 +27,8 @@ export default function MemoryPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [searchLang, setSearchLang] = useState("")
   const [importing, setImporting] = useState<number | null>(null)
+  const [errorMsg, setErrorMsg] = useState("")
+  const [successMsg, setSuccessMsg] = useState("")
 
   const loadStats = useCallback(async () => {
     try {
@@ -58,29 +61,39 @@ export default function MemoryPage() {
       await api.translationMemory.delete(id)
       setEntries((prev) => prev.filter((e) => e.id !== id))
       loadStats()
-    } catch { /* ignore */ }
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Delete failed")
+      setTimeout(() => setErrorMsg(""), 5000)
+    }
   }, [loadStats])
 
   const handleClear = useCallback(async () => {
-    if (!confirm("번역 메모리를 모두 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.")) return
+    if (!(await appConfirm(t("confirmClearMemory")))) return
     try {
       await api.translationMemory.clear()
       setEntries([])
       loadStats()
-    } catch { /* ignore */ }
-  }, [loadStats])
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Clear failed")
+      setTimeout(() => setErrorMsg(""), 5000)
+    }
+  }, [loadStats, t])
 
   const handleImport = useCallback(async (gameId: number) => {
     setImporting(gameId)
     try {
       const res = await api.translationMemory.importFromGame(gameId)
-      alert(`${res.imported}개 항목을 번역 메모리에 추가했습니다`)
+      setSuccessMsg(`${res.imported}${t("importedEntries")}`)
+      setTimeout(() => setSuccessMsg(""), 4000)
       loadStats()
       loadEntries()
-    } catch { /* ignore */ } finally {
+    } catch (e) {
+      setErrorMsg(e instanceof Error ? e.message : "Import failed")
+      setTimeout(() => setErrorMsg(""), 5000)
+    } finally {
       setImporting(null)
     }
-  }, [loadStats, loadEntries])
+  }, [loadStats, loadEntries, t])
 
   const translatedGames = games.filter(g => g.translated_count > 0)
 
@@ -91,7 +104,7 @@ export default function MemoryPage() {
           {t("translationMemory")}
         </h1>
         <p className="text-sm text-text-secondary mt-1">
-          이전 번역을 저장하여 동일 문장 재번역 시 자동 적용
+          {t("memoryDescription")}
         </p>
       </div>
 
@@ -100,7 +113,7 @@ export default function MemoryPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="rounded-lg p-4 text-center bg-overlay-2 border border-overlay-6">
             <p className="text-2xl font-bold text-accent">{stats.total.toLocaleString()}</p>
-            <p className="text-xs text-text-tertiary mt-1">총 항목</p>
+            <p className="text-xs text-text-tertiary mt-1">{t("totalEntries")}</p>
           </div>
           {Object.entries(stats.by_lang).map(([lang, count]) => (
             <div key={lang} className="rounded-lg p-4 text-center bg-overlay-2 border border-overlay-6">
@@ -124,10 +137,10 @@ export default function MemoryPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <DownloadIcon className="size-4 text-accent" />
-                게임에서 가져오기
+                {t("importFromGames")}
               </CardTitle>
               <CardDescription>
-                번역 완료된 게임의 결과를 번역 메모리에 저장합니다
+                {t("importFromGamesDescription")}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -151,6 +164,18 @@ export default function MemoryPage() {
 
       )}
 
+      {/* Messages */}
+      {errorMsg && (
+        <div className="rounded-lg px-4 py-2.5 text-sm text-error bg-error/10 border border-error/20">
+          {errorMsg}
+        </div>
+      )}
+      {successMsg && (
+        <div className="rounded-lg px-4 py-2.5 text-sm text-success bg-success/10 border border-success/20">
+          {successMsg}
+        </div>
+      )}
+
       {/* Search + Actions */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1">
@@ -159,7 +184,7 @@ export default function MemoryPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="번역 검색..."
+            placeholder={t("searchTranslations")}
             className="w-full h-11 pl-10 pr-4 rounded-lg border border-border bg-surface text-text-primary text-sm placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent/50 focus:border-accent transition-all"
           />
         </div>
@@ -168,10 +193,10 @@ export default function MemoryPage() {
           onChange={(e) => setSearchLang(e.target.value)}
           className="h-11 px-3 rounded-lg border border-border bg-surface text-text-primary text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-accent/50"
         >
-          <option value="">모든 언어</option>
-          <option value="ja">일본어</option>
-          <option value="en">영어</option>
-          <option value="zh">중국어</option>
+          <option value="">{t("allLanguages")}</option>
+          <option value="ja">{t("japanese")}</option>
+          <option value="en">{t("english")}</option>
+          <option value="zh">{t("chinese")}</option>
         </select>
         <Button variant="ghost" size="sm" onClick={() => { loadEntries(); loadStats() }}>
           <RefreshCwIcon className="size-4" />
@@ -179,7 +204,7 @@ export default function MemoryPage() {
         {stats && stats.total > 0 && (
           <Button variant="ghost" size="sm" onClick={handleClear} className="text-error hover:text-error">
             <AlertTriangleIcon className="size-4" />
-            전체 삭제
+            {t("deleteAll")}
           </Button>
         )}
       </div>
@@ -193,20 +218,20 @@ export default function MemoryPage() {
         <div className="flex flex-col items-center justify-center py-16 text-center">
           <DatabaseIcon className="size-16 text-text-tertiary mb-4" />
           <p className="text-text-secondary font-medium">
-            {searchQuery ? "검색 결과가 없습니다" : "번역 메모리가 비어 있습니다"}
+            {searchQuery ? t("noSearchResults") : t("memoryEmpty")}
           </p>
           <p className="text-sm text-text-tertiary mt-1">
-            게임을 번역하면 자동으로 저장됩니다
+            {t("memoryAutoSave")}
           </p>
         </div>
       ) : (
         <div className="space-y-1">
           {/* Header */}
           <div className="grid grid-cols-[1fr_1fr_80px_60px_40px] gap-3 px-4 py-2 text-[10px] font-medium text-text-tertiary uppercase tracking-wider">
-            <span>원문</span>
-            <span>번역</span>
-            <span>제공자</span>
-            <span>사용</span>
+            <span>{t("sourceText")}</span>
+            <span>{t("translatedText")}</span>
+            <span>{t("provider")}</span>
+            <span>{t("usageCount")}</span>
             <span></span>
           </div>
           {entries.map((entry) => (
@@ -232,7 +257,7 @@ export default function MemoryPage() {
           ))}
           {entries.length >= 100 && (
             <p className="text-xs text-text-tertiary text-center py-3">
-              최대 100개까지 표시됩니다. 검색어를 입력하여 필터링하세요.
+              {t("maxEntriesNotice")}
             </p>
           )}
         </div>

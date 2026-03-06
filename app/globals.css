@@ -28,7 +28,7 @@
   --color-scrim: var(--scrim);
   --color-scrim-light: var(--scrim-light);
 
-  --font-sans: "Pretendard", "SF Pro Display", "Roboto", "Noto Sans KR", sans-serif;
+  --font-sans: var(--font-pretendard), "Pretendard", "SF Pro Display", "Roboto", "Noto Sans KR", sans-serif;
   --font-mono: "JetBrains Mono", "Fira Code", "SF Mono", "Menlo", monospace;
 
   --radius-xs: 4px;
@@ -121,4 +121,12 @@
 /* ── Selection ── */
 ::selection {
   background: rgba(91, 94, 240, 0.3);
+}
+
+/* ── Checkbox / Radio focus ring (#37) ── */
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
 }

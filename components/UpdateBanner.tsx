@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { DownloadIcon, XIcon, RefreshCwIcon, Loader2Icon } from "lucide-react"
+import { useLocale } from "@/hooks/use-locale"
 
 interface UpdateInfo {
   version: string
@@ -21,10 +22,10 @@ export function UpdateBanner() {
   const [progress, setProgress] = useState<UpdateProgress | null>(null)
   const [ready, setReady] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const { t } = useLocale()
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const api = (window as any).electronAPI
+    const api = window.electronAPI
     if (!api?.isElectron) return
 
     const cleanupAvailable = api.onUpdateAvailable?.((info: UpdateInfo) => {
@@ -48,16 +49,14 @@ export function UpdateBanner() {
   }, [])
 
   const handleDownload = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const api = (window as any).electronAPI
+    const api = window.electronAPI
     if (!api) return
     setDownloading(true)
     api.downloadUpdate()
   }, [])
 
   const handleInstall = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const api = (window as any).electronAPI
+    const api = window.electronAPI
     if (!api) return
     api.installUpdate()
   }, [])
@@ -80,8 +79,8 @@ export function UpdateBanner() {
 
       <span className="flex-1 text-text-primary text-[13px]">
         {ready
-          ? `v${updateInfo.version} 다운로드 완료. 재시작하면 업데이트됩니다.`
-          : `새 버전 v${updateInfo.version} 사용 가능`}
+          ? t("updateReady").replace("{version}", updateInfo.version)
+          : t("updateAvailable").replace("{version}", updateInfo.version)}
       </span>
 
       {downloading && progress && (
@@ -99,7 +98,7 @@ export function UpdateBanner() {
           onClick={handleDownload}
           className="px-3 py-1 rounded-md text-xs font-medium text-white bg-accent hover:bg-accent/90 transition-colors"
         >
-          다운로드
+          {t("download")}
         </button>
       )}
 
@@ -108,7 +107,7 @@ export function UpdateBanner() {
           onClick={handleInstall}
           className="px-3 py-1 rounded-md text-xs font-medium text-white bg-success hover:bg-success/90 transition-colors"
         >
-          재시작
+          {t("restart")}
         </button>
       )}
 

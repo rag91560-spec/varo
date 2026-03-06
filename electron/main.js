@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require("electron")
+const { app, BrowserWindow, shell, ipcMain, dialog } = require("electron")
 const path = require("path")
 const { spawn, fork } = require("child_process")
 const http = require("http")
@@ -12,6 +12,7 @@ const FRONTEND_PORT = 3100
 let mainWindow = null
 let backendProcess = null
 let frontendProcess = null
+const gameWindows = new Map() // gameId -> BrowserWindow
 
 // ── Helpers ──
 
@@ -54,6 +55,20 @@ function killProcess(proc) {
   } catch {}
 }
 
+let _cachedPython = null
+function findPython() {
+  if (_cachedPython) return _cachedPython
+  const { execSync } = require("child_process")
+  for (const cmd of ["python", "python3", "py"]) {
+    try {
+      execSync(`${cmd} --version`, { stdio: "ignore" })
+      _cachedPython = cmd
+      return cmd
+    } catch {}
+  }
+  return null
+}
+
 // ── Server Management ──
 
 async function startBackend() {
@@ -61,10 +76,18 @@ async function startBackend() {
     console.log("[electron] Backend already running on port", BACKEND_PORT)
     return
   }
+  const pythonCmd = findPython()
+  if (!pythonCmd) {
+    dialog.showErrorBox(
+      "Python Not Found",
+      "Python is required to run the backend.\nPlease install Python 3.10+ from https://python.org and restart the app."
+    )
+    return
+  }
   console.log("[electron] Starting backend...")
   if (isDev) {
     backendProcess = spawn(
-      "python",
+      pythonCmd,
       [
         "-m", "uvicorn", "backend.server:app",
         "--host", "127.0.0.1",
@@ -77,7 +100,7 @@ async function startBackend() {
     // Production: run Python backend from resources
     const resourceBase = path.join(process.resourcesPath)
     backendProcess = spawn(
-      "python",
+      pythonCmd,
       [
         "-m", "uvicorn", "backend.server:app",
         "--host", "127.0.0.1",
@@ -179,16 +202,20 @@ function createWindow() {
       }
       nextjs-portal { display: none !important; }
     `)
-    // Mark body so React components can detect Electron + hide Next.js dev tools
+    // Mark body so React components can detect Electron
     mainWindow.webContents.executeJavaScript(`
       document.documentElement.classList.add('is-electron');
-      new MutationObserver(() => {
-        document.querySelectorAll('button').forEach(b => {
-          if (b.textContent?.includes('Next.js Dev Tools')) b.style.display = 'none';
-        });
-        document.querySelectorAll('nextjs-portal').forEach(e => e.style.display = 'none');
-      }).observe(document.body, { childList: true, subtree: true });
     `)
+    if (isDev) {
+      mainWindow.webContents.executeJavaScript(`
+        new MutationObserver(() => {
+          document.querySelectorAll('button').forEach(b => {
+            if (b.textContent?.includes('Next.js Dev Tools')) b.style.display = 'none';
+          });
+          document.querySelectorAll('nextjs-portal').forEach(e => e.style.display = 'none');
+        }).observe(document.body, { childList: true, subtree: true });
+      `)
+    }
   })
 
   // External links open in system browser
@@ -256,9 +283,106 @@ ipcMain.handle("check-for-updates", async () => {
 ipcMain.handle("download-update", () => autoUpdater.downloadUpdate())
 ipcMain.handle("install-update", () => autoUpdater.quitAndInstall())
 
+// Confirm dialog (native)
+ipcMain.handle("show-confirm-dialog", async (event, message) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const result = await dialog.showMessageBox(win || mainWindow, {
+    type: "warning",
+    buttons: ["Cancel", "OK"],
+    defaultId: 0,
+    cancelId: 0,
+    message: typeof message === "string" ? message : "Are you sure?",
+  })
+  return result.response === 1
+})
+
+// APK file dialogs
+ipcMain.handle("select-apk-file", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select APK files",
+    filters: [{ name: "APK", extensions: ["apk"] }],
+    properties: ["openFile", "multiSelections"],
+  })
+  return result.filePaths
+})
+
+ipcMain.handle("select-apk-folder", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select folder containing APK files",
+    properties: ["openDirectory"],
+  })
+  return result.filePaths[0] || ""
+})
+
+// Subtitle/text file dialog
+ipcMain.handle("select-subtitle-files", async () => {
+  const result = await dialog.showOpenDialog({
+    title: "Select subtitle/text files",
+    filters: [{ name: "Subtitle", extensions: ["srt", "ass", "ssa", "vtt", "txt"] }],
+    properties: ["openFile", "multiSelections"],
+  })
+  return result.filePaths
+})
+
+// HTML game window
+ipcMain.handle("open-html-game", (event, { gameId, title, serveUrl }) => {
+  const existing = gameWindows.get(gameId)
+  if (existing && !existing.isDestroyed()) {
+    existing.focus()
+    return
+  }
+
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    backgroundColor: "#000000",
+    autoHideMenuBar: true,
+    title: title || "Game",
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+  })
+
+  win.loadURL(`http://localhost:${BACKEND_PORT}${serveUrl}`)
+
+  // F11 fullscreen toggle, ESC to exit fullscreen
+  win.webContents.on("before-input-event", (e, input) => {
+    if (input.type === "keyDown") {
+      if (input.key === "F11") {
+        win.setFullScreen(!win.isFullScreen())
+        e.preventDefault()
+      } else if (input.key === "Escape" && win.isFullScreen()) {
+        win.setFullScreen(false)
+        e.preventDefault()
+      }
+    }
+  })
+
+  win.on("closed", () => {
+    gameWindows.delete(gameId)
+  })
+
+  gameWindows.set(gameId, win)
+})
+
+ipcMain.handle("close-html-game", (event, { gameId }) => {
+  const win = gameWindows.get(gameId)
+  if (win && !win.isDestroyed()) {
+    win.close()
+  }
+  gameWindows.delete(gameId)
+})
+
 // ── App Lifecycle ──
 
 function cleanup() {
+  // Close all game windows
+  for (const [id, win] of gameWindows) {
+    if (!win.isDestroyed()) win.close()
+  }
+  gameWindows.clear()
+
   killProcess(backendProcess)
   killProcess(frontendProcess)
   backendProcess = null

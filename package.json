@@ -13,11 +13,14 @@
     "electron:pack": "next build && node scripts/prepare-build.js && electron-builder --dir"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
+    "@xyflow/react": "^12.5.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "electron-updater": "^6.3.0",
     "lucide-react": "^0.575.0",
     "next": "^16.1.6",
+    "pretendard": "^1.3.9",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwind-merge": "^3.5.0"
@@ -54,12 +57,17 @@
       {
         "from": "backend",
         "to": "backend",
-        "filter": ["**/*.py", "*.txt"]
+        "filter": [
+          "**/*.py",
+          "*.txt"
+        ]
       },
       {
         "from": "data",
         "to": "data",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
