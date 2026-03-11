@@ -65,7 +65,7 @@ npm run electron:build
 ### 유료 (라이선스 필요)
 - **Claude, OpenAI, Gemini** 등 고품질 AI 번역 엔진
 - 서버 측 라이선스 검증을 통해 제공
-- 라이선스 키 구매: [ClosedClaws](https://closedclaws.com)
+- 라이선스 키 구매: [Pixiv Fanbox](https://rag91560.fanbox.cc/)
 
 ## 프로젝트 구조
 
