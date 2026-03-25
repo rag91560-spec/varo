@@ -56,6 +56,10 @@ async def start_translation(game_id: int, body: TranslateRequest):
         logger.exception("start_translation failed for game %s", game_id)
         raise HTTPException(500, f"Translation start failed: {type(e).__name__}: {e}")
 
+    # extraction 실패 등으로 job이 이미 에러 상태면 HTTP 에러로 반환
+    if job.status == "error":
+        raise HTTPException(400, job.error_message or "Translation failed to start")
+
     return {
         "job_id": job.job_id,
         "status": job.status,

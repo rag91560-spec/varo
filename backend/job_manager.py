@@ -166,6 +166,8 @@ async def start_translation(game_id: int, provider: str, api_key: str,
         job.error_message = str(e)
         await db.create_job(job_id, game_id, 0)
         await db.update_job(job_id, status="error", error_message=str(e))
+        await db.update_game(game_id, status="idle")
+        job.broadcast("error", {"message": str(e)})
         return job
 
     # Apply range filter if specified
