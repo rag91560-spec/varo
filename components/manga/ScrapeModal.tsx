@@ -1,11 +1,11 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { XIcon, LinkIcon, Loader2Icon, CheckCircleIcon, AlertCircleIcon, UploadIcon, ImageIcon } from "lucide-react"
+import { XIcon, Loader2Icon, CheckCircleIcon, AlertCircleIcon, UploadIcon, ImageIcon, SearchIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FolderBrowser } from "@/components/FolderBrowser"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
-import type { MangaScrapeStatus } from "@/lib/types"
 
 interface ScrapeModalProps {
   open: boolean
@@ -13,13 +13,13 @@ interface ScrapeModalProps {
   onComplete: () => void
 }
 
-type Tab = "scrape" | "upload"
+type Tab = "upload" | "browse"
 
 export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
-  const [tab, setTab] = useState<Tab>("scrape")
+  const [tab, setTab] = useState<Tab>("upload")
 
   useEffect(() => {
-    if (!open) setTab("scrape")
+    if (!open) setTab("upload")
   }, [open])
 
   if (!open) return null
@@ -34,17 +34,6 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle">
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setTab("scrape")}
-              className={cn(
-                "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
-                tab === "scrape"
-                  ? "bg-accent/10 text-accent"
-                  : "text-text-tertiary hover:text-text-primary"
-              )}
-            >
-              URL 스크랩
-            </button>
-            <button
               onClick={() => setTab("upload")}
               className={cn(
                 "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
@@ -55,6 +44,17 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
             >
               파일 업로드
             </button>
+            <button
+              onClick={() => setTab("browse")}
+              className={cn(
+                "px-3 py-1.5 rounded-lg text-sm font-medium transition-colors",
+                tab === "browse"
+                  ? "bg-accent/10 text-accent"
+                  : "text-text-tertiary hover:text-text-primary"
+              )}
+            >
+              탐색
+            </button>
           </div>
           <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
             <XIcon className="size-5" />
@@ -62,158 +62,17 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
         </div>
 
         {/* Content */}
-        {tab === "scrape" ? (
-          <ScrapeTab onClose={onClose} onComplete={onComplete} open={open} />
-        ) : (
+        {tab === "upload" ? (
           <UploadTab onClose={onClose} onComplete={onComplete} open={open} />
+        ) : (
+          <BrowseTab onClose={onClose} onComplete={onComplete} />
         )}
       </div>
     </div>
   )
 }
 
-// --- Scrape Tab (existing logic extracted) ---
-
-function ScrapeTab({ onClose, onComplete, open }: { onClose: () => void; onComplete: () => void; open: boolean }) {
-  const [url, setUrl] = useState("")
-  const [status, setStatus] = useState<MangaScrapeStatus | null>(null)
-  const [loading, setLoading] = useState(false)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100)
-    } else {
-      setUrl("")
-      setStatus(null)
-      setLoading(false)
-      if (pollRef.current) clearInterval(pollRef.current)
-    }
-  }, [open])
-
-  const startScrape = useCallback(async () => {
-    if (!url.trim()) return
-    setLoading(true)
-    try {
-      const result = await api.manga.scrape(url)
-      setStatus(result)
-
-      if (result.status === "exists") {
-        setTimeout(() => {
-          onComplete()
-          onClose()
-        }, 1000)
-        return
-      }
-
-      pollRef.current = setInterval(async () => {
-        try {
-          const s = await api.manga.scrapeStatus(url)
-          setStatus(s)
-          if (s.status === "completed" || s.status === "error") {
-            if (pollRef.current) clearInterval(pollRef.current)
-            setLoading(false)
-            if (s.status === "completed") {
-              setTimeout(() => {
-                onComplete()
-                onClose()
-              }, 1500)
-            }
-          }
-        } catch {
-          // ignore polling errors
-        }
-      }, 1000)
-    } catch (e: unknown) {
-      setStatus({
-        status: "error",
-        progress: 0,
-        total: 0,
-        manga_id: null,
-        error: e instanceof Error ? e.message : "Scrape failed",
-      })
-      setLoading(false)
-    }
-  }, [url, onComplete, onClose])
-
-  const isComplete = status?.status === "completed"
-  const isError = status?.status === "error"
-  const isExists = status?.status === "exists"
-  const progressPct = status && status.total > 0 ? Math.round((status.progress / status.total) * 100) : 0
-
-  return (
-    <div className="p-5 space-y-4">
-      <div className="flex gap-2">
-        <div className="flex-1 relative">
-          <LinkIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-text-tertiary" />
-          <input
-            ref={inputRef}
-            type="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && startScrape()}
-            placeholder="hitomi.la 또는 arca.live URL..."
-            className={cn(
-              "w-full pl-10 pr-3 py-2.5 rounded-lg text-sm",
-              "bg-surface-elevated border border-border-subtle",
-              "text-text-primary placeholder:text-text-tertiary",
-              "focus:outline-none focus:border-accent/50 focus:ring-1 focus:ring-accent/20"
-            )}
-            disabled={loading}
-          />
-        </div>
-        <Button onClick={startScrape} loading={loading} disabled={!url.trim()}>
-          스크랩
-        </Button>
-      </div>
-
-      {status && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            {isComplete || isExists ? (
-              <>
-                <CheckCircleIcon className="size-4 text-green-500" />
-                <span className="text-green-500">
-                  {isExists ? "이미 라이브러리에 있습니다" : "완료!"}
-                </span>
-              </>
-            ) : isError ? (
-              <>
-                <AlertCircleIcon className="size-4 text-error" />
-                <span className="text-error">{status.error || "스크랩 실패"}</span>
-              </>
-            ) : (
-              <>
-                <Loader2Icon className="size-4 animate-spin text-accent" />
-                <span className="text-text-secondary">
-                  {status.status === "extracting" ? "메타데이터 추출 중..." :
-                   status.status === "downloading" ? `이미지 다운로드 중... (${status.progress}/${status.total})` :
-                   "시작 중..."}
-                </span>
-              </>
-            )}
-          </div>
-
-          {status.status === "downloading" && status.total > 0 && (
-            <div className="h-1.5 bg-overlay-4 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all duration-300"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      <p className="text-[11px] text-text-tertiary">
-        지원: hitomi.la, arca.live
-      </p>
-    </div>
-  )
-}
-
-// --- Upload Tab (new) ---
+// --- Upload Tab ---
 
 function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onComplete: () => void; open: boolean }) {
   const [title, setTitle] = useState("")
@@ -251,7 +110,11 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
   }, [])
 
   const handleUpload = useCallback(async () => {
-    if (!title.trim() || files.length === 0) return
+    if (files.length === 0) return
+    if (!title.trim()) {
+      setError("제목을 입력해주세요")
+      return
+    }
     setUploading(true)
     setError("")
     setProgress(0)
@@ -382,11 +245,89 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
       <Button
         onClick={handleUpload}
         loading={uploading}
-        disabled={!title.trim() || files.length === 0}
+        disabled={files.length === 0}
         className="w-full"
       >
         업로드 ({files.length}장)
       </Button>
+    </div>
+  )
+}
+
+// --- Browse Tab ---
+
+function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
+  const [selectedFolder, setSelectedFolder] = useState("")
+  const [title, setTitle] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+
+  const handleAdd = async () => {
+    if (!selectedFolder || !title.trim()) return
+    setLoading(true)
+    setError("")
+    try {
+      // Fetch image files in the selected folder via filesystem API
+      const res = await api.filesystem.browse(selectedFolder, ".jpg,.jpeg,.png,.bmp,.webp")
+      const imageFiles = res.entries.filter(e => e.type === "file")
+      if (imageFiles.length === 0) {
+        setError("이미지 파일이 없습니다")
+        setLoading(false)
+        return
+      }
+      // Fetch files from paths and upload
+      const files: File[] = []
+      for (const entry of imageFiles) {
+        const resp = await fetch(`/api/filesystem/serve?path=${encodeURIComponent(entry.path)}`)
+        if (resp.ok) {
+          const blob = await resp.blob()
+          files.push(new File([blob], entry.name, { type: blob.type }))
+        }
+      }
+      if (files.length === 0) {
+        setError("파일을 읽을 수 없습니다")
+        setLoading(false)
+        return
+      }
+      await api.manga.upload(title.trim(), files)
+      onComplete()
+      onClose()
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "추가 실패")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="p-5 space-y-3">
+      <input
+        type="text"
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="제목..."
+        className={cn(
+          "w-full px-3 py-2 rounded-lg text-sm",
+          "bg-surface-elevated border border-border-subtle",
+          "text-text-primary placeholder:text-text-tertiary",
+          "focus:outline-none focus:border-accent/50"
+        )}
+      />
+      <FolderBrowser
+        filter=".jpg,.jpeg,.png,.bmp,.webp"
+        foldersOnly
+        onSelect={(path) => setSelectedFolder(path)}
+        maxHeight="200px"
+      />
+      {selectedFolder && (
+        <div className="flex items-center gap-2">
+          <span className="flex-1 text-xs text-text-secondary truncate">{selectedFolder}</span>
+          <Button size="sm" onClick={handleAdd} loading={loading} disabled={!title.trim()}>
+            폴더에서 추가
+          </Button>
+        </div>
+      )}
+      {error && <p className="text-sm text-error">{error}</p>}
     </div>
   )
 }

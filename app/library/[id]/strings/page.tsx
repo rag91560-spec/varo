@@ -31,6 +31,7 @@ import type { TranslateRequest, TranslationEntry, TranslationStringsResponse } f
 // ---------------------------------------------------------------------------
 
 type StatusFilter = "all" | "pending" | "translated" | "reviewed"
+type SafetyFilter = "" | "safe" | "risky" | "unsafe"
 
 interface EntryWithIndex extends TranslationEntry {
   _index: number
@@ -56,6 +57,20 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={cn("inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border", cls)}>
       {label[status] ?? status}
+    </span>
+  )
+}
+
+function SafetyBadge({ safety }: { safety?: string }) {
+  if (!safety || safety === "safe") return null
+  const map: Record<string, string> = {
+    risky: "bg-warning/15 text-warning border-warning/25",
+    unsafe: "bg-error/15 text-error border-error/25",
+  }
+  const cls = map[safety] ?? ""
+  return (
+    <span className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border", cls)}>
+      {safety}
     </span>
   )
 }
@@ -144,7 +159,9 @@ function StringRow({
       className={cn(
         "border-b border-overlay-4 hover:bg-overlay-2 transition-colors duration-200",
         isSelected && "bg-accent/5",
-        isTranslating && "bg-warning/8 ring-1 ring-warning/30 ring-inset"
+        isTranslating && "bg-warning/8 ring-1 ring-warning/30 ring-inset",
+        entry.safety === "risky" && "bg-warning/5",
+        entry.safety === "unsafe" && "bg-error/5 opacity-60"
       )}
     >
       {/* Checkbox */}
@@ -172,13 +189,16 @@ function StringRow({
         )}
       </td>
 
-      {/* Tag */}
+      {/* Tag + Safety */}
       <td className="px-2 py-3 w-24">
-        {entry.tag && (
-          <span className="text-xs bg-overlay-4 border border-overlay-6 rounded px-1.5 py-0.5 text-text-secondary">
-            {entry.tag}
-          </span>
-        )}
+        <div className="flex flex-col gap-0.5">
+          {entry.tag && (
+            <span className="text-xs bg-overlay-4 border border-overlay-6 rounded px-1.5 py-0.5 text-text-secondary">
+              {entry.tag}
+            </span>
+          )}
+          <SafetyBadge safety={entry.safety} />
+        </div>
       </td>
 
       {/* Original */}
@@ -277,10 +297,12 @@ export default function StringsPage({
   const [search, setSearch] = useState("")
   const [searchInput, setSearchInput] = useState("")
   const [qaOnly, setQaOnly] = useState(false)
+  const [safetyFilter, setSafetyFilter] = useState<SafetyFilter>("")
 
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkLoading, setBulkLoading] = useState(false)
   const [translateLoading, setTranslateLoading] = useState(false)
+  const [applyLoading, setApplyLoading] = useState(false)
 
   const PER_PAGE = 50
 
@@ -332,6 +354,7 @@ export default function StringsPage({
         status: statusFilter === "all" ? "" : statusFilter,
         search,
         qa_only: qaOnly,
+        safety: safetyFilter || undefined,
       })
       setData(result)
     } catch (err) {
@@ -339,7 +362,7 @@ export default function StringsPage({
     } finally {
       setLoading(false)
     }
-  }, [gameId, page, statusFilter, search, qaOnly, t])
+  }, [gameId, page, statusFilter, search, qaOnly, safetyFilter, t])
 
   useEffect(() => {
     fetchStrings()
@@ -349,7 +372,7 @@ export default function StringsPage({
   useEffect(() => {
     setPage(1)
     setSelected(new Set())
-  }, [statusFilter, search, qaOnly])
+  }, [statusFilter, search, qaOnly, safetyFilter])
 
   // ---------------------------------------------------------------------------
   // Translation controls
@@ -389,6 +412,19 @@ export default function StringsPage({
       setError(err instanceof Error ? err.message : "Translation failed")
     } finally {
       setTranslateLoading(false)
+    }
+  }
+
+  const handleApply = async () => {
+    if (gameId === null) return
+    setApplyLoading(true)
+    try {
+      await api.translate.apply(gameId)
+      fetchStrings()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("applyFailed"))
+    } finally {
+      setApplyLoading(false)
     }
   }
 
@@ -486,7 +522,7 @@ export default function StringsPage({
   const someSelected = selected.size > 0 && !allSelected
 
   return (
-    <Paywall show={!license.valid} onLicenseVerified={refreshLicense}>
+    <Paywall show={!license.valid} onLicenseVerified={refreshLicense} dismissable={false}>
     <div className="min-h-screen bg-background text-text-primary">
       {/* Header */}
       <div className="sticky top-0 z-10 bg-surface/95 backdrop-blur border-b border-overlay-6 px-6 py-3 flex items-center gap-3">
@@ -600,6 +636,19 @@ export default function StringsPage({
               {t("retranslate")}
             </Button>
 
+            {translatedCount > 0 && (
+              <Button
+                variant="accent"
+                size="sm"
+                loading={applyLoading}
+                disabled={applyLoading}
+                onClick={handleApply}
+              >
+                <CheckCircleIcon className="size-3.5" />
+                {t("apply")}
+              </Button>
+            )}
+
             <div className="w-px h-5 bg-overlay-6 mx-1" />
 
             {/* Stats */}
@@ -640,6 +689,24 @@ export default function StringsPage({
                 : t("filterReviewed")}
             </FilterChip>
           ))}
+        </div>
+
+        <div className="w-px h-5 bg-overlay-6" />
+
+        {/* Safety filter chips */}
+        <div className="flex items-center gap-1.5">
+          <FilterChip active={safetyFilter === ""} onClick={() => setSafetyFilter("")}>
+            All
+          </FilterChip>
+          <FilterChip active={safetyFilter === "safe"} onClick={() => setSafetyFilter("safe")}>
+            Safe {data?.safety_counts?.safe ? `(${data.safety_counts.safe.toLocaleString()})` : ""}
+          </FilterChip>
+          <FilterChip active={safetyFilter === "risky"} onClick={() => setSafetyFilter("risky")}>
+            Risky {data?.safety_counts?.risky ? `(${data.safety_counts.risky.toLocaleString()})` : ""}
+          </FilterChip>
+          <FilterChip active={safetyFilter === "unsafe"} onClick={() => setSafetyFilter("unsafe")}>
+            Unsafe {data?.safety_counts?.unsafe ? `(${data.safety_counts.unsafe.toLocaleString()})` : ""}
+          </FilterChip>
         </div>
 
         <div className="w-px h-5 bg-overlay-6" />

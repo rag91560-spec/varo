@@ -12,9 +12,9 @@ from .. import db
 from .. import engine_bridge
 from .. import job_manager
 try:
-    from ..license import require_license
+    from ..license import require_license, verify_license
 except ImportError:
-    from ..license_stub import require_license
+    from ..license_stub import require_license, verify_license
 from ..sse_utils import sse_format as _sse_format
 
 logger = logging.getLogger(__name__)
@@ -170,6 +170,14 @@ async def cancel_translation(game_id: int):
 @router.post("/apply")
 async def apply_translation(game_id: int):
     """Apply translated strings back to game files."""
+    # 라이선스 유저는 전체 적용, 미인증은 60%만 적용
+    try:
+        license_info = await verify_license()
+        is_licensed = license_info.get("valid", False)
+    except Exception:
+        is_licensed = False
+    partial_ratio = 1.0 if is_licensed else 0.6
+
     game = await db.get_game(game_id)
     if not game:
         raise HTTPException(404, "Game not found")
@@ -186,10 +194,13 @@ async def apply_translation(game_id: int):
 
     # Rebuild project object
     from .. import engine_bridge
-    engine_bridge._ensure_ue_translator()
+    try:
+        engine_bridge._ensure_ue_translator()
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
     ue_translator = engine_bridge.ue_translator
     if ue_translator is None:
-        raise HTTPException(500, "ue_translator module failed to load")
+        raise HTTPException(500, "ue_translator 모듈 로드 실패 — 설치 경로를 확인하세요")
 
     project = ue_translator.TranslationProject()
     project.game_path = game["path"]
@@ -214,7 +225,9 @@ async def apply_translation(game_id: int):
 
     try:
         patch_path = engine_bridge.apply_translations_to_game(
-            game["path"], game["engine"], project, resources, aes_key=game.get("aes_key", "")
+            game["path"], game["engine"], project, resources,
+            aes_key=game.get("aes_key", ""),
+            partial_ratio=partial_ratio,
         )
         await db.update_game(game_id, status="applied")
         return {"ok": True, "patch_path": patch_path}

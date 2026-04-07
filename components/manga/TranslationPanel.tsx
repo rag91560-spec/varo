@@ -21,8 +21,12 @@ export function TranslationPanel({ entries, open, onClose }: TranslationPanelPro
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
         <h3 className="text-sm font-semibold text-text-primary">번역 텍스트</h3>
-        <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
-          <XIcon className="size-4" />
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-all"
+        >
+          <XIcon className="size-3.5" />
+          닫기
         </button>
       </div>
 

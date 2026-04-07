@@ -4,11 +4,12 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { useLocale } from "@/hooks/use-locale"
 import { useSubtitles, useSubtitleSegments, useSubtitleJob } from "@/hooks/use-subtitle-job"
 import { api } from "@/lib/api"
-import type { SubtitleSet, SubtitleSegment, SubtitleStyleOptions } from "@/lib/types"
+import type { SubtitleSet, SubtitleSegment, SubtitleStyleOptions, SubtitleGlossaryEntry } from "@/lib/types"
 import { AI_PROVIDERS, getProvider } from "@/lib/providers"
 import { ChipButton } from "@/components/game-detail/ChipButton"
 import { SubtitleOverlay } from "./SubtitleOverlay"
 import { SubtitleEditor } from "./SubtitleEditor"
+import { SubtitleTimeline } from "./SubtitleTimeline"
 import { STTPanel } from "./STTPanel"
 
 interface SubtitleWorkspaceProps {
@@ -69,16 +70,176 @@ export function SubtitleWorkspace({
   const [displayMode, setDisplayMode] = useState<"original" | "translated" | "both">("both")
   const [translating, setTranslating] = useState(false)
   const [translateError, setTranslateError] = useState("")
+  const [analyzing, setAnalyzing] = useState(false)
   const [provider, setProvider] = useState(AI_PROVIDERS[0]?.id ?? "claude_oauth")
   const [selectedModel, setSelectedModel] = useState(AI_PROVIDERS[0]?.defaultModel ?? "sonnet")
   const videoRef = useRef<HTMLVideoElement>(null)
   const audioRef = useRef<HTMLAudioElement>(null)
   const [subtitleStyle, setSubtitleStyle] = useState<SubtitleStyleOptions>({ ...DEFAULT_STYLE })
+  const [videoDuration, setVideoDuration] = useState(0)
+  const [selectedSegmentId, setSelectedSegmentId] = useState<number | null>(null)
+  const [positionMode, setPositionMode] = useState<"all" | "single">("all")
+  const [fallbackProviders, setFallbackProviders] = useState<string[]>([])
 
-  // Auto-select first subtitle, or auto-create if none exist
+  // Handle segment timing change from timeline drag
+  const handleSegmentTimingChange = useCallback(async (segmentId: number, startTime: number, endTime: number) => {
+    // Optimistic update
+    setSegments((prev) =>
+      prev.map((s) => s.id === segmentId ? { ...s, start_time: startTime, end_time: endTime } : s)
+    )
+    try {
+      await api.subtitle.updateSegment(segmentId, { start_time: startTime, end_time: endTime })
+    } catch {
+      // Revert on failure
+      refreshSegments()
+    }
+  }, [refreshSegments, setSegments])
+
+  // Handle subtitle position drag — respects positionMode (all/single)
+  const handlePositionChange = useCallback(async (segmentId: number, posX: number, posY: number) => {
+    if (positionMode === "all" && activeSubtitleId) {
+      // Apply to all segments
+      setSegments((prev) => prev.map((s) => ({ ...s, pos_x: posX, pos_y: posY })))
+      try {
+        await api.subtitle.bulkUpdatePosition(activeSubtitleId, posX, posY)
+      } catch {
+        refreshSegments()
+      }
+    } else {
+      // Apply to single segment
+      setSegments((prev) =>
+        prev.map((s) => s.id === segmentId ? { ...s, pos_x: posX, pos_y: posY } : s)
+      )
+      try {
+        await api.subtitle.updateSegment(segmentId, { pos_x: posX, pos_y: posY })
+      } catch {
+        refreshSegments()
+      }
+    }
+  }, [positionMode, activeSubtitleId, refreshSegments, setSegments])
+
+  // Reset position to default (global style)
+  const handlePositionReset = useCallback(async (segmentId: number) => {
+    setSegments((prev) =>
+      prev.map((s) => s.id === segmentId ? { ...s, pos_x: null, pos_y: null } : s)
+    )
+    try {
+      await api.subtitle.updateSegment(segmentId, { pos_x: null, pos_y: null })
+    } catch {
+      refreshSegments()
+    }
+  }, [refreshSegments, setSegments])
+
+  // Reset ALL positions to default
+  const handlePositionResetAll = useCallback(async () => {
+    if (!activeSubtitleId) return
+    setSegments((prev) => prev.map((s) => ({ ...s, pos_x: null, pos_y: null })))
+    try {
+      await api.subtitle.bulkUpdatePosition(activeSubtitleId, null, null)
+    } catch {
+      refreshSegments()
+    }
+  }, [activeSubtitleId, refreshSegments, setSegments])
+
+  // Segment CRUD handlers
+  const handleSegmentCreate = useCallback(async (startTime: number, endTime: number) => {
+    if (!activeSubtitleId) return
+    try {
+      await api.subtitle.createSegment(activeSubtitleId, { start_time: startTime, end_time: endTime })
+      refreshSegments()
+      refreshSubtitles()
+    } catch {
+      // ignore
+    }
+  }, [activeSubtitleId, refreshSegments, refreshSubtitles])
+
+  const handleSegmentDelete = useCallback(async (segmentId: number) => {
+    try {
+      await api.subtitle.deleteSegment(segmentId)
+      setSelectedSegmentId(null)
+      refreshSegments()
+      refreshSubtitles()
+    } catch {
+      // ignore
+    }
+  }, [refreshSegments, refreshSubtitles])
+
+  const handleSegmentSplit = useCallback(async (segmentId: number, splitTime: number) => {
+    try {
+      await api.subtitle.splitSegment(segmentId, splitTime)
+      refreshSegments()
+      refreshSubtitles()
+    } catch {
+      // ignore
+    }
+  }, [refreshSegments, refreshSubtitles])
+
+  // Translation context
+  const [translationContext, setTranslationContext] = useState("")
+
+  // Glossary
+  const [glossary, setGlossary] = useState<SubtitleGlossaryEntry[]>([])
+  const [glossaryOpen, setGlossaryOpen] = useState(false)
+  const [glossaryNewSource, setGlossaryNewSource] = useState("")
+  const [glossaryNewTarget, setGlossaryNewTarget] = useState("")
+  const [glossaryNewCategory, setGlossaryNewCategory] = useState<"general" | "character" | "place" | "term">("general")
+
+  // Load glossary when subtitle changes
+  useEffect(() => {
+    if (!activeSubtitleId) return
+    api.subtitle.getGlossary(activeSubtitleId).then(r => setGlossary(r.entries)).catch(() => {})
+  }, [activeSubtitleId])
+
+  const handleAddGlossary = async () => {
+    if (!activeSubtitleId || !glossaryNewSource.trim() || !glossaryNewTarget.trim()) return
+    try {
+      await api.subtitle.upsertGlossary(activeSubtitleId, {
+        source: glossaryNewSource.trim(),
+        target: glossaryNewTarget.trim(),
+        category: glossaryNewCategory,
+      })
+      const r = await api.subtitle.getGlossary(activeSubtitleId)
+      setGlossary(r.entries)
+      setGlossaryNewSource("")
+      setGlossaryNewTarget("")
+    } catch { /* ignore */ }
+  }
+
+  const handleDeleteGlossary = async (id: number) => {
+    try {
+      await api.subtitle.deleteGlossary(id)
+      setGlossary(prev => prev.filter(e => e.id !== id))
+    } catch { /* ignore */ }
+  }
+
+  const handleAutoGenerateGlossary = async () => {
+    if (!activeSubtitleId || analyzing) return
+    setAnalyzing(true)
+    try {
+      const result = await api.subtitle.analyzeVideo(activeSubtitleId, {
+        provider,
+        model: selectedModel,
+      })
+      setTranslationContext(result.context)
+      // Refresh glossary (auto-generated entries may have been added)
+      const r = await api.subtitle.getGlossary(activeSubtitleId)
+      setGlossary(r.entries)
+    } catch (e) {
+      setTranslateError(e instanceof Error ? e.message : "분석 실패")
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  // Auto-select best subtitle (prefer one with segments), or auto-create if none exist
   useEffect(() => {
     if (subtitles.length > 0 && !activeSubtitleId) {
-      setActiveSubtitleId(subtitles[0].id)
+      // Prefer subtitle with most segments, then most recent
+      const best = [...subtitles].sort((a, b) => {
+        if (b.segment_count !== a.segment_count) return b.segment_count - a.segment_count
+        return b.id - a.id
+      })[0]
+      setActiveSubtitleId(best.id)
     } else if (subtitles.length === 0 && !activeSubtitleId && !subsLoading) {
       // Auto-create subtitle record so STT panel is immediately usable
       handleCreateSubtitle().catch(() => {})
@@ -158,11 +319,16 @@ export function SubtitleWorkspace({
     setTranslating(true)
     setTranslateError("")
     try {
+      // Save fallback providers setting
+      if (fallbackProviders.length > 0) {
+        await api.settings.put({ fallback_providers: fallbackProviders })
+      }
       await startTranslate(activeSubtitleId, {
         source_lang: subtitle?.source_lang || "ja",
         target_lang: "ko",
         provider,
         model: selectedModel,
+        ...(translationContext.trim() ? { context: translationContext.trim() } : {}),
       })
     } catch (e) {
       setTranslateError(e instanceof Error ? e.message : "Failed")
@@ -174,15 +340,53 @@ export function SubtitleWorkspace({
   useEffect(() => {
     if (jobProgress.status === "completed") {
       if (translating) {
-        setTranslating(false)
-        refreshSegments()
-        refreshSubtitles()
+        // Show 100% briefly before hiding progress
+        setTimeout(() => {
+          setTranslating(false)
+          refreshSegments()
+          refreshSubtitles()
+        }, 1500)
       }
     } else if (jobProgress.status === "error") {
       setTranslating(false)
       setTranslateError(jobProgress.error || "Unknown error")
     }
   }, [jobProgress])
+
+  // Auto Sync (FFT-based)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState("")
+  const [syncResult, setSyncResult] = useState<{ offset_ms: number; stretch_factor: number; confidence: number } | null>(null)
+
+  const handleAutoSync = async () => {
+    if (!activeSubtitleId) return
+    setSyncing(true)
+    setSyncError("")
+    setSyncResult(null)
+    try {
+      const { job_id } = await api.subtitle.startSync(activeSubtitleId)
+      // Listen to SSE
+      const es = new EventSource(api.subtitle.syncStatusUrl(job_id))
+      es.addEventListener("message", (e) => {
+        const msg = JSON.parse(e.data)
+        if (msg.event === "complete") {
+          setSyncing(false)
+          setSyncResult(msg.data)
+          es.close()
+          // Reload segments
+          refreshSegments()
+        } else if (msg.event === "error") {
+          setSyncing(false)
+          setSyncError(msg.data.message || "Sync failed")
+          es.close()
+        }
+      })
+      es.onerror = () => { setSyncing(false); es.close() }
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Failed")
+      setSyncing(false)
+    }
+  }
 
   // Hardsub export
   const [hardsubbing, setHardsubbing] = useState(false)
@@ -335,6 +539,9 @@ export function SubtitleWorkspace({
                   src={mediaSource}
                   controls
                   onTimeUpdate={handleTimeUpdate}
+                  onLoadedMetadata={() => {
+                    if (videoRef.current) setVideoDuration(videoRef.current.duration || 0)
+                  }}
                   className="max-h-full max-w-full"
                 />
                 <SubtitleOverlay
@@ -342,6 +549,8 @@ export function SubtitleWorkspace({
                   currentTime={currentTime}
                   displayMode={displayMode}
                   style={subtitleStyle}
+                  editable={currentStep === "export" || currentStep === "edit"}
+                  onPositionChange={handlePositionChange}
                 />
               </>
             ) : (
@@ -356,6 +565,25 @@ export function SubtitleWorkspace({
               </div>
             )}
           </div>
+
+          {/* Timeline track */}
+          {videoDuration > 0 && mediaType === "video" && (
+            <SubtitleTimeline
+              segments={segments}
+              duration={videoDuration}
+              currentTime={currentTime}
+              selectedSegmentId={selectedSegmentId}
+              subtitleId={activeSubtitleId}
+              mediaId={mediaId}
+              mediaType={mediaType}
+              onSeek={handleSeek}
+              onSegmentSelect={setSelectedSegmentId}
+              onSegmentTimingChange={handleSegmentTimingChange}
+              onSegmentCreate={handleSegmentCreate}
+              onSegmentDelete={handleSegmentDelete}
+              onSegmentSplit={handleSegmentSplit}
+            />
+          )}
 
           {/* Subtitle info bar */}
           {subtitle && (
@@ -390,6 +618,24 @@ export function SubtitleWorkspace({
                   {t("importSubtitleFile")}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Subtitle selector — always visible when multiple subtitles exist */}
+          {subtitles.length > 1 && (currentStep === "extract" || currentStep === "stt") && (
+            <div className="px-3 py-2 border-b flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">자막:</span>
+              <select
+                value={activeSubtitleId ?? ""}
+                onChange={(e) => setActiveSubtitleId(Number(e.target.value))}
+                className="text-xs border rounded px-2 py-1 bg-background flex-1"
+              >
+                {subtitles.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.label || `#${s.id}`} ({s.status}, {s.segment_count}seg)
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -569,7 +815,25 @@ export function SubtitleWorkspace({
 
                     {/* Position */}
                     <div className="space-y-2">
-                      <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">위치</span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">위치</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground">드래그 적용:</span>
+                          {(["all", "single"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setPositionMode(mode)}
+                              className={`px-1.5 py-0.5 text-[10px] rounded transition-all ${
+                                positionMode === mode
+                                  ? "bg-primary/15 text-primary font-medium"
+                                  : "text-muted-foreground hover:text-foreground"
+                              }`}
+                            >
+                              {mode === "all" ? "전체" : "개별"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="flex gap-1.5">
                         {POSITION_PRESETS.map((p) => (
                           <button
@@ -586,6 +850,33 @@ export function SubtitleWorkspace({
                           </button>
                         ))}
                       </div>
+                      {/* Per-segment / bulk position controls */}
+                      {(() => {
+                        const activeSeg = segments.find(s => s.start_time <= currentTime && s.end_time >= currentTime)
+                        const hasPos = activeSeg?.pos_x != null && activeSeg?.pos_y != null
+                        const anyHasPos = segments.some(s => s.pos_x != null && s.pos_y != null)
+                        if (!hasPos && !anyHasPos) return null
+                        return (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {hasPos && activeSeg && positionMode === "single" && (
+                              <button
+                                onClick={() => handlePositionReset(activeSeg.id)}
+                                className="px-2 py-1 text-[10px] rounded border border-muted text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
+                              >
+                                현재 자막 초기화
+                              </button>
+                            )}
+                            {anyHasPos && (
+                              <button
+                                onClick={handlePositionResetAll}
+                                className="px-2 py-1 text-[10px] rounded border border-muted text-muted-foreground hover:text-destructive hover:border-destructive/30 transition-colors"
+                              >
+                                전체 초기화
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -594,12 +885,29 @@ export function SubtitleWorkspace({
               {/* Action bar */}
               <div className="flex flex-wrap items-center gap-2 px-3 py-2 border-b">
                 {currentStep === "edit" && segments.length > 0 && (
-                  <button
-                    onClick={() => setCurrentStep("translate")}
-                    className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
-                  >
-                    {t("translateSubtitle")} →
-                  </button>
+                  <>
+                    <button
+                      onClick={handleAutoSync}
+                      disabled={syncing}
+                      className="px-3 py-1 text-xs bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/80 disabled:opacity-50"
+                    >
+                      {syncing ? "Syncing..." : "Auto Sync"}
+                    </button>
+                    {syncResult && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {syncResult.offset_ms > 0 ? "+" : ""}{Math.round(syncResult.offset_ms)}ms
+                        {syncResult.stretch_factor !== 1 && ` ×${syncResult.stretch_factor.toFixed(4)}`}
+                        {` (${Math.round(syncResult.confidence * 100)}%)`}
+                      </span>
+                    )}
+                    {syncError && <span className="text-[10px] text-destructive">{syncError}</span>}
+                    <button
+                      onClick={() => setCurrentStep("translate")}
+                      className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                    >
+                      {t("translateSubtitle")} →
+                    </button>
+                  </>
                 )}
                 {currentStep === "translate" && (
                   <div className="flex flex-col gap-2 w-full">
@@ -636,30 +944,197 @@ export function SubtitleWorkspace({
                       ) : null
                     })()}
 
+                    {/* Fallback providers */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">폴백:</span>
+                      {AI_PROVIDERS.filter(p => p.id !== provider).map(p => (
+                        <label key={p.id} className="flex items-center gap-1 text-xs">
+                          <input
+                            type="checkbox"
+                            checked={fallbackProviders.includes(p.id)}
+                            onChange={(e) => {
+                              setFallbackProviders(prev =>
+                                e.target.checked
+                                  ? [...prev, p.id]
+                                  : prev.filter(id => id !== p.id)
+                              )
+                            }}
+                            className="rounded border-muted accent-primary"
+                          />
+                          {p.name}
+                        </label>
+                      ))}
+                    </div>
+
+                    {/* Translation context */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">컨텍스트:</span>
+                        {mediaType === "video" && (
+                          <button
+                            onClick={async () => {
+                              if (!activeSubtitleId || analyzing) return
+                              setAnalyzing(true)
+                              setTranslateError("")
+                              try {
+                                const result = await api.subtitle.analyzeVideo(activeSubtitleId, {
+                                  provider,
+                                  model: selectedModel,
+                                })
+                                setTranslationContext(result.context)
+                              } catch (e) {
+                                setTranslateError(e instanceof Error ? e.message : "분석 실패")
+                              } finally {
+                                setAnalyzing(false)
+                              }
+                            }}
+                            disabled={analyzing || translating}
+                            className="px-2 py-0.5 text-[11px] rounded-full border border-blue-400/50 bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                          >
+                            {analyzing ? "분석 중..." : "영상 자동 분석"}
+                          </button>
+                        )}
+                      </div>
+                      <textarea
+                        value={translationContext}
+                        onChange={(e) => setTranslationContext(e.target.value)}
+                        placeholder="영상 자동 분석을 누르면 작품명, 캐릭터, 용어 등을 자동으로 파악��니다. 직접 입력도 가능합니다."
+                        rows={translationContext ? 5 : 2}
+                        className="w-full text-xs px-2 py-1.5 rounded-md border bg-background resize-none placeholder:text-muted-foreground/50"
+                      />
+                    </div>
+
+                    {/* Glossary Panel */}
+                    <div className="border rounded-md overflow-hidden">
+                      <button
+                        onClick={() => setGlossaryOpen(!glossaryOpen)}
+                        className="w-full flex items-center justify-between px-2 py-1.5 text-xs hover:bg-accent/30 transition-colors"
+                      >
+                        <span className="font-medium">��어집 ({glossary.length})</span>
+                        <svg className={`w-3 h-3 transition-transform ${glossaryOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </button>
+                      {glossaryOpen && (
+                        <div className="border-t">
+                          {glossary.length > 0 && (
+                            <div className="max-h-40 overflow-y-auto">
+                              <table className="w-full text-xs">
+                                <thead className="bg-muted/30 sticky top-0">
+                                  <tr>
+                                    <th className="px-2 py-1 text-left font-medium">원문</th>
+                                    <th className="px-2 py-1 text-left font-medium">번역</th>
+                                    <th className="px-2 py-1 text-left font-medium w-16">분류</th>
+                                    <th className="w-6" />
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {glossary.map(e => (
+                                    <tr key={e.id} className="border-t hover:bg-accent/20">
+                                      <td className="px-2 py-0.5">{e.source}</td>
+                                      <td className="px-2 py-0.5">{e.target}</td>
+                                      <td className="px-2 py-0.5 text-muted-foreground">
+                                        {e.category === "character" ? "인물" :
+                                         e.category === "place" ? "장소" :
+                                         e.category === "term" ? "용어" : "일반"}
+                                      </td>
+                                      <td>
+                                        <button
+                                          onClick={() => handleDeleteGlossary(e.id)}
+                                          className="p-0.5 text-muted-foreground hover:text-destructive"
+                                        >
+                                          ×
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-1 p-1.5 border-t bg-muted/10">
+                            <input
+                              value={glossaryNewSource}
+                              onChange={e => setGlossaryNewSource(e.target.value)}
+                              placeholder="원문"
+                              className="flex-1 text-xs px-1.5 py-1 rounded border bg-background min-w-0"
+                              onKeyDown={e => e.key === "Enter" && handleAddGlossary()}
+                            />
+                            <input
+                              value={glossaryNewTarget}
+                              onChange={e => setGlossaryNewTarget(e.target.value)}
+                              placeholder="번역"
+                              className="flex-1 text-xs px-1.5 py-1 rounded border bg-background min-w-0"
+                              onKeyDown={e => e.key === "Enter" && handleAddGlossary()}
+                            />
+                            <select
+                              value={glossaryNewCategory}
+                              onChange={e => setGlossaryNewCategory(e.target.value as typeof glossaryNewCategory)}
+                              className="text-xs px-1 py-1 rounded border bg-background w-14"
+                            >
+                              <option value="general">일반</option>
+                              <option value="character">인물</option>
+                              <option value="place">장소</option>
+                              <option value="term">용어</option>
+                            </select>
+                            <button
+                              onClick={handleAddGlossary}
+                              disabled={!glossaryNewSource.trim() || !glossaryNewTarget.trim()}
+                              className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+                            >
+                              +
+                            </button>
+                          </div>
+                          {mediaType === "video" && (
+                            <div className="px-1.5 pb-1.5">
+                              <button
+                                onClick={handleAutoGenerateGlossary}
+                                disabled={analyzing || translating}
+                                className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50"
+                              >
+                                {analyzing ? "분석 중..." : "영상 분석으로 자동 생성"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     {/* Translate button / progress */}
                     <div className="flex items-center gap-2">
                       {!translating ? (
                         <button
                           onClick={handleTranslate}
-                          className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+                          disabled={analyzing}
+                          className="px-3 py-1 text-xs bg-primary text-primary-foreground rounded-md hover:bg-primary/90 disabled:opacity-50"
                         >
                           {t("translateSubtitle")}
                         </button>
                       ) : (
                         <div className="flex items-center gap-2">
-                          <div className="w-24 h-1.5 bg-muted rounded-full overflow-hidden">
+                          <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-primary transition-all"
-                              style={{ width: `${jobProgress.progress * 100}%` }}
+                              className={`h-full transition-all duration-300 ${
+                                jobProgress.status === "completed" ? "bg-green-500" : "bg-primary"
+                              }`}
+                              style={{ width: `${Math.max(jobProgress.progress * 100, 2)}%` }}
                             />
                           </div>
-                          <span className="text-xs">{Math.round(jobProgress.progress * 100)}%</span>
-                          <button
-                            onClick={cancelJob}
-                            className="px-2 py-0.5 text-xs text-destructive border rounded hover:bg-destructive/10"
-                          >
-                            {t("cancel")}
-                          </button>
+                          <span className="text-xs min-w-[3rem]">
+                            {jobProgress.status === "completed"
+                              ? "완료!"
+                              : jobProgress.message && jobProgress.progress < 0.1
+                                ? jobProgress.message
+                                : `${Math.round(jobProgress.progress * 100)}%`}
+                          </span>
+                          {jobProgress.status !== "completed" && (
+                            <button
+                              onClick={cancelJob}
+                              className="px-2 py-0.5 text-xs text-destructive border rounded hover:bg-destructive/10"
+                            >
+                              {t("cancel")}
+                            </button>
+                          )}
                         </div>
                       )}
                       {translateError && (
@@ -702,6 +1177,7 @@ export function SubtitleWorkspace({
                 currentTime={currentTime}
                 onSeek={handleSeek}
                 onSegmentsChange={refreshSegments}
+                glossary={glossary}
               />
             </>
           )}

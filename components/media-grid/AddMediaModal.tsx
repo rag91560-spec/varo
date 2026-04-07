@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useRef } from "react"
-import { XIcon, FolderOpenIcon, LinkIcon, FileTextIcon, MusicIcon, FolderIcon, Loader2Icon } from "lucide-react"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { XIcon, FolderOpenIcon, LinkIcon, FileTextIcon, MusicIcon, FolderIcon, Loader2Icon, SearchIcon, DownloadIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { FolderBrowser } from "@/components/FolderBrowser"
 import { useLocale } from "@/hooks/use-locale"
 import { api } from "@/lib/api"
 import type { VideoItem, AudioItem } from "@/lib/types"
@@ -13,7 +14,7 @@ interface AddMediaModalProps {
   onAdded: (item: VideoItem | AudioItem) => void
 }
 
-type Tab = "local" | "folder" | "url"
+type Tab = "local" | "folder" | "url" | "browse"
 
 const SCRIPT_EXTS = new Set([".srt", ".vtt", ".lrc"])
 
@@ -46,6 +47,50 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
   const [url, setUrl] = useState("")
   const [urlTitle, setUrlTitle] = useState("")
   const [folderPath, setFolderPath] = useState("")
+  const [browsePath, setBrowsePath] = useState("")
+
+  // YouTube download state
+  const [dlJobId, setDlJobId] = useState("")
+  const [dlProgress, setDlProgress] = useState(0)
+  const [dlMessage, setDlMessage] = useState("")
+
+  const isYouTubeUrl = useCallback((u: string) => {
+    return /(?:youtube\.com|youtu\.be|nicovideo\.jp|bilibili\.com)/.test(u)
+  }, [])
+
+  // SSE listener for download progress
+  useEffect(() => {
+    if (!dlJobId) return
+    const es = new EventSource(api.videos.downloadStatusUrl(dlJobId))
+    es.addEventListener("progress", ((e: MessageEvent) => {
+      const d = JSON.parse(e.data)
+      setDlProgress(d.progress ?? 0)
+      setDlMessage(d.message ?? "")
+    }) as EventListener)
+    es.addEventListener("complete", ((e: MessageEvent) => {
+      const d = JSON.parse(e.data)
+      setDlProgress(1)
+      setDlMessage("")
+      setDlJobId("")
+      setLoading(false)
+      if (d.video_id) {
+        onAdded({ id: d.video_id, title: d.title ?? "Downloaded", type: "local", source: "", thumbnail: "", duration: d.duration ?? 0, size: d.filesize ?? 0, category_id: null, sort_order: 0, created_at: "", updated_at: "" })
+        onClose()
+      }
+    }) as EventListener)
+    es.addEventListener("error", ((e: MessageEvent) => {
+      try { const d = JSON.parse(e.data); setError(d.message ?? "Download failed") } catch { setError("Download failed") }
+      setDlJobId("")
+      setLoading(false)
+    }) as EventListener)
+    es.addEventListener("cancelled", () => {
+      setDlJobId("")
+      setLoading(false)
+      setError("Download cancelled")
+    })
+    es.onerror = () => { es.close() }
+    return () => es.close()
+  }, [dlJobId, onAdded, onClose])
 
   const isElectron = typeof window !== "undefined" && !!window.electronAPI?.isElectron
   const isVideo = mediaType === "video"
@@ -53,6 +98,9 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
     ? "video/*"
     : ".mp3,.ogg,.wav,.flac,.m4a,.aac,.wma,.opus,.srt,.vtt,.lrc,audio/*"
   const addLabel = isVideo ? t("addVideo") : t("addAudio")
+  const browseFilter = isVideo
+    ? ".mp4,.mkv,.avi,.webm,.mov,.srt,.ass,.vtt"
+    : ".mp3,.wav,.ogg,.flac,.m4a,.aac,.wma,.opus,.srt,.vtt,.lrc"
 
   const apiNs = isVideo ? api.videos : api.audio
 
@@ -157,14 +205,28 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
     setLoading(true)
     setError("")
     try {
+      // YouTube-like URLs: use yt-dlp download
+      if (isVideo && isYouTubeUrl(url.trim())) {
+        const { job_id } = await api.videos.downloadUrl(url.trim())
+        setDlJobId(job_id)
+        setDlProgress(0)
+        setDlMessage("Starting download...")
+        return // SSE handler will manage the rest
+      }
+      // Normal URL: just add reference
       const title = urlTitle.trim() || url.trim()
       const item = await apiNs.add({ title, type: "url", source: url.trim() })
       onAdded(item)
       onClose()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
-    } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCancelDownload = async () => {
+    if (dlJobId) {
+      try { await api.videos.cancelDownload(dlJobId) } catch {}
     }
   }
 
@@ -217,6 +279,15 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
           >
             <LinkIcon className="size-4" />
             {t("urlLink")}
+          </button>
+          <button
+            onClick={() => { setTab("browse"); setError("") }}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-2 text-sm rounded-md transition-all ${
+              tab === "browse" ? "bg-surface text-text-primary font-medium shadow-sm" : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <SearchIcon className="size-4" />
+            탐색
           </button>
         </div>
 
@@ -285,23 +356,106 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
 
         {tab === "url" && (
           <div className="space-y-3">
-            <input
-              type="text"
-              value={urlTitle}
-              onChange={(e) => setUrlTitle(e.target.value)}
-              placeholder={isVideo ? t("videoTitle") : t("audioTitle") || t("videoTitle")}
-              className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
+            {!dlJobId ? (
+              <>
+                <input
+                  type="text"
+                  value={urlTitle}
+                  onChange={(e) => setUrlTitle(e.target.value)}
+                  placeholder={isVideo ? t("videoTitle") : t("audioTitle") || t("videoTitle")}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+                <input
+                  type="url"
+                  value={url}
+                  onChange={(e) => { setUrl(e.target.value); setError("") }}
+                  placeholder={isVideo ? "YouTube URL or direct link" : t("enterUrl")}
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+                {isVideo && isYouTubeUrl(url) && (
+                  <p className="text-xs text-accent flex items-center gap-1">
+                    <DownloadIcon className="size-3" />
+                    YouTube detected — will download via yt-dlp
+                  </p>
+                )}
+                <Button onClick={handleAddUrl} disabled={!url.trim() || loading} loading={loading} className="w-full">
+                  {isVideo && isYouTubeUrl(url) ? (
+                    <><DownloadIcon className="size-4" /> Download</>
+                  ) : addLabel}
+                </Button>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <Loader2Icon className="size-4 animate-spin text-accent" />
+                  <span>Downloading...</span>
+                </div>
+                <div className="w-full h-2 rounded-full bg-overlay-8 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-accent transition-all duration-300"
+                    style={{ width: `${Math.round(dlProgress * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-xs text-text-tertiary">
+                  <span>{Math.round(dlProgress * 100)}%</span>
+                  <span className="truncate ml-2">{dlMessage}</span>
+                </div>
+                <Button variant="secondary" size="sm" onClick={handleCancelDownload} className="w-full">
+                  Cancel
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === "browse" && (
+          <div className="space-y-3">
+            <FolderBrowser
+              filter={browseFilter}
+              onSelect={(path, type) => {
+                if (type === "file") setBrowsePath(path)
+              }}
+              onDoubleClick={async (path) => {
+                setLoading(true)
+                setError("")
+                try {
+                  const name = path.split(/[\\/]/).pop() || path
+                  const item = await apiNs.add({ title: name, type: "local", source: path })
+                  onAdded(item)
+                  onClose()
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : String(err))
+                } finally {
+                  setLoading(false)
+                }
+              }}
+              maxHeight="250px"
             />
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => { setUrl(e.target.value); setError("") }}
-              placeholder={t("enterUrl")}
-              className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <Button onClick={handleAddUrl} disabled={!url.trim() || loading} loading={loading} className="w-full">
-              {addLabel}
-            </Button>
+            {browsePath && (
+              <div className="flex items-center gap-2">
+                <span className="flex-1 text-xs text-text-secondary truncate">{browsePath}</span>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    setLoading(true)
+                    setError("")
+                    try {
+                      const name = browsePath.split(/[\\/]/).pop() || browsePath
+                      const item = await apiNs.add({ title: name, type: "local", source: browsePath })
+                      onAdded(item)
+                      setBrowsePath("")
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : String(err))
+                    } finally {
+                      setLoading(false)
+                    }
+                  }}
+                  loading={loading}
+                >
+                  {addLabel}
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

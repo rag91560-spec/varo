@@ -4,10 +4,26 @@ const { spawn, fork } = require("child_process")
 const http = require("http")
 const { autoUpdater } = require("electron-updater")
 
+// EPIPE 완전 차단 — Electron에서 부모 파이프 닫힌 후 stdout/stderr write 시 발생
+process.stdout?.on("error", () => {})
+process.stderr?.on("error", () => {})
+process.on("uncaughtException", (err) => {
+  if (err.code === "EPIPE" || err.code === "ERR_STREAM_DESTROYED") return
+  // console.error도 EPIPE 유발하므로 dialog만 사용
+  try { require("electron").dialog.showErrorBox("Error", `${err.stack || err.message}`) } catch {}
+})
+
 const isDev = !app.isPackaged
 const ROOT = path.join(__dirname, "..")
 const BACKEND_PORT = 8000
 const FRONTEND_PORT = 3100
+
+// userData 경로를 고정 — NSIS installer와 일치시키기 위해
+// app.getPath("userData")는 productName("게임번역기")을 사용하지만
+// 영문 경로로 통일하여 한국어 경로 문제 방지
+if (!isDev) {
+  app.setPath("userData", path.join(app.getPath("appData"), "game-translator"))
+}
 
 let mainWindow = null
 let backendProcess = null
@@ -50,13 +66,25 @@ function killProcess(proc) {
   if (!proc || proc.killed) return
   try {
     if (process.platform === "win32") {
-      // /t kills entire process tree (uvicorn reloader + worker)
       const { execSync } = require("child_process")
       try {
         execSync(`taskkill /pid ${proc.pid} /f /t`, { stdio: "ignore", timeout: 5000 })
       } catch {}
     } else {
       proc.kill("SIGTERM")
+    }
+  } catch {}
+}
+
+/** Kill any process listening on a port (fallback for orphaned children) */
+function killByPort(port) {
+  if (process.platform !== "win32") return
+  const { execSync } = require("child_process")
+  try {
+    const out = execSync(`netstat -ano | findstr :${port} | findstr LISTENING`, { stdio: "pipe", timeout: 3000 }).toString()
+    const match = out.match(/LISTENING\s+(\d+)/)
+    if (match) {
+      execSync(`taskkill /pid ${match[1]} /f /t`, { stdio: "ignore", timeout: 3000 })
     }
   } catch {}
 }
@@ -113,26 +141,43 @@ async function startBackend() {
     const fs = require("fs")
     fs.mkdirSync(dataDir, { recursive: true })
 
-    // One-time migration: copy data from old resources/data/ if userData/data/ is empty
-    const oldDataDir = path.join(process.resourcesPath, "data")
+    // One-time migration: copy DB from old location to userData
     const userDb = path.join(dataDir, "library.db")
-    if (!fs.existsSync(userDb) && fs.existsSync(path.join(oldDataDir, "library.db"))) {
-      console.log("[electron] Migrating data from resources/ to userData/...")
-      try {
-        const copyRecursive = (src, dest) => {
-          if (fs.statSync(src).isDirectory()) {
-            fs.mkdirSync(dest, { recursive: true })
-            for (const item of fs.readdirSync(src)) {
-              copyRecursive(path.join(src, item), path.join(dest, item))
-            }
-          } else {
-            fs.copyFileSync(src, dest)
+    if (!fs.existsSync(userDb) || fs.statSync(userDb).size < 1024) {
+      const copyRecursive = (src, dest) => {
+        if (fs.statSync(src).isDirectory()) {
+          fs.mkdirSync(dest, { recursive: true })
+          for (const item of fs.readdirSync(src)) {
+            copyRecursive(path.join(src, item), path.join(dest, item))
           }
+        } else {
+          fs.copyFileSync(src, dest)
         }
-        copyRecursive(oldDataDir, dataDir)
-        console.log("[electron] Data migration complete.")
-      } catch (err) {
-        console.error("[electron] Data migration failed:", err)
+      }
+
+      // Search order for old DB:
+      // 1. resources/data/ (bundled with older builds)
+      // 2. Previous install paths (NSIS overwrites resources/ on update)
+      const oldCandidates = [
+        // 이전 버전의 userData (한국어 경로 사용하던 시절)
+        path.join(app.getPath("appData"), "게임번역기", "data"),
+        path.join(process.resourcesPath, "data"),
+        // Common install locations where previous version may have stored data
+        path.join(path.dirname(process.resourcesPath), "..", "resources", "data"),
+        path.join(app.getPath("home"), "AppData", "Local", "Programs", "game-translator", "resources", "data"),
+        path.join("C:\\Program Files", "게임번역기", "resources", "data"),
+        path.join("C:\\Program Files (x86)", "게임번역기", "resources", "data"),
+      ]
+
+      for (const oldDataDir of oldCandidates) {
+        const oldDb = path.join(oldDataDir, "library.db")
+        try {
+          if (fs.existsSync(oldDb) && fs.statSync(oldDb).size > 1024) {
+            console.log("[migration] Found old DB at:", oldDataDir)
+            copyRecursive(oldDataDir, dataDir)
+            break
+          }
+        } catch {}
       }
     }
 
@@ -149,26 +194,28 @@ async function startBackend() {
       }
     )
   }
-  backendProcess.stdout?.on("data", (d) => process.stdout.write(`[backend] ${d}`))
-  backendProcess.stderr?.on("data", (d) => process.stderr.write(`[backend] ${d}`))
+  backendProcess.stdout?.on("data", () => {})
+  backendProcess.stderr?.on("data", () => {})
+  backendProcess.stdout?.on("error", () => {})
+  backendProcess.stderr?.on("error", () => {})
   backendProcess.on("error", (err) => {
-    console.error("[backend] Spawn error:", err)
     if (!isDev) {
-      dialog.showErrorBox(
-        "Backend Error",
-        `백엔드 실행 실패: ${err.message}\n\nWindows Defender나 백신이 backend.exe를 차단했을 수 있습니다.\n앱 폴더를 백신 예외에 추가해주세요.`
-      )
+      try {
+        dialog.showErrorBox(
+          "Backend Error",
+          `백엔드 실행 실패: ${err.message}\n\nWindows Defender나 백신이 backend.exe를 차단했을 수 있습니다.\n앱 폴더를 백신 예외에 추가해주세요.`
+        )
+      } catch {}
     }
   })
-  backendProcess.on("exit", (code, signal) => {
-    if (code !== null && code !== 0) {
-      console.error(`[backend] Exited with code ${code}`)
-      if (!isDev) {
+  backendProcess.on("exit", (code) => {
+    if (code !== null && code !== 0 && !isDev) {
+      try {
         dialog.showErrorBox(
           "Backend Crashed",
           `백엔드가 비정상 종료되었습니다 (코드: ${code}).\n앱을 재시작해주세요.`
         )
-      }
+      } catch {}
     }
   })
 }
@@ -197,9 +244,12 @@ async function startFrontend() {
       stdio: ["ignore", "pipe", "pipe", "ipc"],
     })
   }
-  frontendProcess.stdout?.on("data", (d) => process.stdout.write(`[frontend] ${d}`))
-  frontendProcess.stderr?.on("data", (d) => process.stderr.write(`[frontend] ${d}`))
-  frontendProcess.on("error", (err) => console.error("[frontend] Error:", err))
+  // 파이프 읽되 에러 무시 (EPIPE 방지)
+  frontendProcess.stdout?.on("data", () => {})
+  frontendProcess.stderr?.on("data", () => {})
+  frontendProcess.stdout?.on("error", () => {})
+  frontendProcess.stderr?.on("error", () => {})
+  frontendProcess.on("error", () => {})
 }
 
 // ── Window ──
@@ -213,6 +263,7 @@ function createWindow() {
     backgroundColor: "#0c0c0f",
     icon: path.join(__dirname, "..", "build", "icon.png"),
     show: false,
+    acceptFirstMouse: true,
     titleBarStyle: "hidden",
     titleBarOverlay: {
       color: "#0c0c0f",
@@ -321,7 +372,7 @@ function createWindow() {
 
 // ── Auto Update ──
 
-autoUpdater.autoDownload = false
+autoUpdater.autoDownload = true
 autoUpdater.setFeedURL({
   provider: "generic",
   url: "https://api.closedclaws.com/api/update",
@@ -383,18 +434,19 @@ ipcMain.handle("show-confirm-dialog", async (event, message) => {
   return result.response === 1
 })
 
-// Game folder dialog
+// Game folder / ZIP dialog
 ipcMain.handle("select-game-folder", async () => {
-  const result = await dialog.showOpenDialog({
-    title: "Select game folder",
-    properties: ["openDirectory"],
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Select game folder or ZIP",
+    properties: ["openDirectory", "openFile"],
+    filters: [{ name: "ZIP", extensions: ["zip"] }],
   })
   return result.filePaths[0] || ""
 })
 
 // APK file dialogs
 ipcMain.handle("select-apk-file", async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select APK files",
     filters: [{ name: "APK", extensions: ["apk"] }],
     properties: ["openFile", "multiSelections"],
@@ -403,7 +455,7 @@ ipcMain.handle("select-apk-file", async () => {
 })
 
 ipcMain.handle("select-apk-folder", async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select folder containing APK files",
     properties: ["openDirectory"],
   })
@@ -412,7 +464,7 @@ ipcMain.handle("select-apk-folder", async () => {
 
 // Subtitle/text file dialog
 ipcMain.handle("select-subtitle-files", async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select subtitle/text files",
     filters: [{ name: "Subtitle", extensions: ["srt", "ass", "ssa", "vtt", "txt"] }],
     properties: ["openFile", "multiSelections"],
@@ -422,7 +474,7 @@ ipcMain.handle("select-subtitle-files", async () => {
 
 // Video file dialogs
 ipcMain.handle("select-video-files", async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select video files",
     filters: [{ name: "Video", extensions: ["mp4", "mkv", "webm", "avi", "mov"] }],
     properties: ["openFile", "multiSelections"],
@@ -431,7 +483,7 @@ ipcMain.handle("select-video-files", async () => {
 })
 
 ipcMain.handle("select-video-folder", async () => {
-  const result = await dialog.showOpenDialog({
+  const result = await dialog.showOpenDialog(mainWindow, {
     title: "Select folder containing video files",
     properties: ["openDirectory"],
   })
@@ -776,6 +828,11 @@ function cleanup() {
 
   killProcess(backendProcess)
   killProcess(frontendProcess)
+  // Fallback: kill orphaned processes by port (handles shell-spawned children)
+  if (isDev) {
+    killByPort(BACKEND_PORT)
+    killByPort(FRONTEND_PORT)
+  }
   backendProcess = null
   frontendProcess = null
 }

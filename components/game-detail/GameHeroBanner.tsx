@@ -26,6 +26,25 @@ function NavButton({ onClick, children, className = "" }: {
   )
 }
 
+const SUPPORTED_ENGINES = [
+  "RPG Maker MV/MZ",
+  "RPG Maker VX Ace",
+  "RPG Maker XP",
+  "Ren'Py",
+  "Unity",
+  "Wolf RPG",
+  "TyranoScript",
+  "Kirikiri",
+  "SRPG Studio",
+  "LiveMaker",
+  "DXLib",
+  "Mumu",
+  "GameMaker",
+  "Godot",
+  "GDevelop",
+  "UE4/5",
+]
+
 interface GameHeroBannerProps {
   game: Game
   statusText: string
@@ -33,8 +52,10 @@ interface GameHeroBannerProps {
   editing: boolean
   editTitle: string
   editExe: string
+  editEngine: string
   onEditTitle: (v: string) => void
   onEditExe: (v: string) => void
+  onEditEngine: (v: string) => void
   onSaveEdit: () => void
   onCancelEdit: () => void
   onBack: () => void
@@ -48,8 +69,10 @@ export function GameHeroBanner({
   editing,
   editTitle,
   editExe,
+  editEngine,
   onEditTitle,
   onEditExe,
+  onEditEngine,
   onSaveEdit,
   onCancelEdit,
   onBack,
@@ -112,6 +135,16 @@ export function GameHeroBanner({
               placeholder={t("exePathPlaceholder")}
               className="w-full h-10 px-4 rounded-lg border border-white/10 bg-black/30 backdrop-blur-sm text-white text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent/50"
             />
+            <select
+              value={editEngine}
+              onChange={(e) => onEditEngine(e.target.value)}
+              className="w-full h-10 px-3 rounded-lg border border-white/10 bg-black/50 backdrop-blur-sm text-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/50"
+            >
+              <option value="">{t("engineAutoDetect")}</option>
+              {SUPPORTED_ENGINES.map(e => (
+                <option key={e} value={e}>{e}</option>
+              ))}
+            </select>
             <div className="flex gap-2">
               <Button variant="accent" size="sm" onClick={onSaveEdit}>
                 <SaveIcon className="size-3.5" /> {t("save")}

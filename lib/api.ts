@@ -1,5 +1,6 @@
 import type {
   Game,
+  GameFolder,
   TranslateRequest,
   TranslationJob,
   ScanResult,
@@ -33,8 +34,21 @@ import type {
   AudioItem,
   MediaCategory,
   MangaItem,
-  MangaScrapeStatus,
   MangaTranslationResult,
+  MangaTranslationEntry,
+  VideoDownloadJob,
+  SyncResult,
+  RenderConfig,
+  FontInfo,
+  MangaRenderStatus,
+  InpaintMode,
+  DetectorType,
+  SubtitleSet,
+  SubtitleSegment,
+  SubtitleJobStatus,
+  SubtitleExportOptions,
+  SubtitleStyleOptions,
+  SubtitleGlossaryEntry,
 } from "./types"
 
 const BASE = "/api"
@@ -135,6 +149,7 @@ export const api = {
       }),
 
     statusUrl: (gameId: number) => `${BASE}/games/${gameId}/translate/status`,
+    pollUrl: (gameId: number) => `/api/games/${gameId}/translate/poll`,
   },
 
   settings: {
@@ -146,6 +161,12 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ provider, key }),
       }),
+    crashLog: async (): Promise<string> => {
+      const res = await fetch("/api/settings/crash-log")
+      return res.text()
+    },
+    clearCrashLog: () =>
+      request<{ ok: boolean }>("/settings/crash-log", { method: "DELETE" }),
   },
 
   license: {
@@ -334,6 +355,9 @@ export const api = {
     autoSetup: () =>
       request<{ ok: boolean; status: string }>("/android/emulator/auto-setup", { method: "POST" }),
 
+    activeSetup: () =>
+      request<{ active: boolean }>("/android/emulator/setup/active"),
+
     setupEmulatorCancel: () =>
       request<{ ok: boolean }>("/android/emulator/setup/cancel", { method: "POST" }),
 
@@ -361,7 +385,7 @@ export const api = {
   },
 
   strings: {
-    get: (gameId: number, params?: { page?: number; per_page?: number; status?: string; search?: string; tag?: string; qa_only?: boolean }) => {
+    get: (gameId: number, params?: { page?: number; per_page?: number; status?: string; search?: string; tag?: string; qa_only?: boolean; safety?: string }) => {
       const sp = new URLSearchParams()
       if (params?.page) sp.set("page", String(params.page))
       if (params?.per_page) sp.set("per_page", String(params.per_page))
@@ -369,6 +393,7 @@ export const api = {
       if (params?.search) sp.set("search", params.search)
       if (params?.tag) sp.set("tag", params.tag)
       if (params?.qa_only) sp.set("qa_only", "true")
+      if (params?.safety) sp.set("safety", params.safety)
       return request<TranslationStringsResponse>(`/games/${gameId}/translate/strings?${sp}`)
     },
 
@@ -560,6 +585,17 @@ export const api = {
         method: "POST",
         body: JSON.stringify({ ids, category_id: categoryId }),
       }),
+
+    downloadUrl: (url: string, categoryId?: number | null) =>
+      request<{ job_id: string; status: string }>("/videos/download-url", {
+        method: "POST",
+        body: JSON.stringify({ url, category_id: categoryId ?? null }),
+      }),
+
+    downloadStatusUrl: (jobId: string) => `${BASE}/videos/download/${jobId}/status`,
+
+    cancelDownload: (jobId: string) =>
+      request<{ ok: boolean }>(`/videos/download/${jobId}/cancel`, { method: "POST" }),
   },
 
   audio: {
@@ -658,17 +694,23 @@ export const api = {
 
     get: (id: number) => request<MangaItem>(`/manga/${id}`),
 
-    scrape: (url: string) =>
-      request<MangaScrapeStatus>("/manga/scrape", {
-        method: "POST",
-        body: JSON.stringify({ url }),
-      }),
-
-    scrapeStatus: (url: string) =>
-      request<MangaScrapeStatus>(`/manga/scrape/status?url=${encodeURIComponent(url)}`),
-
     delete: (id: number) =>
       request<{ ok: boolean }>(`/manga/${id}`, { method: "DELETE" }),
+
+    update: (id: number, data: Partial<Pick<MangaItem, "title" | "artist" | "tags" | "category_id">>) =>
+      request<MangaItem>(`/manga/${id}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          ...data,
+          category_id: data.category_id === undefined ? -1 : data.category_id,
+        }),
+      }),
+
+    bulkMove: (ids: number[], categoryId: number | null) =>
+      request<{ ok: boolean; moved: number }>("/manga/bulk-move", {
+        method: "POST",
+        body: JSON.stringify({ ids, category_id: categoryId }),
+      }),
 
     imageUrl: (id: number, page: number) => `${BASE}/manga/${id}/images/${page}`,
 
@@ -686,10 +728,10 @@ export const api = {
       return res.json()
     },
 
-    translate: (id: number, page: number, model?: string) =>
+    translate: (id: number, page: number, model?: string, detector?: DetectorType) =>
       request<MangaTranslationResult>(`/manga/${id}/translate`, {
         method: "POST",
-        body: JSON.stringify({ page, model: model ?? "gemini-2.0-flash" }),
+        body: JSON.stringify({ page, model: model ?? "gemini-2.0-flash", detector: detector ?? "gemini" }),
       }),
 
     getTranslation: (id: number, page: number) =>
@@ -732,6 +774,249 @@ export const api = {
       request<{ ok: boolean; page_count: number }>(`/manga/${id}/images/${page}`, {
         method: "DELETE",
       }),
+
+    renderPage: (id: number, page: number, config?: Partial<RenderConfig>) =>
+      request<{ rendered_path: string; inpaint_mode: string; font_id: string }>(
+        `/manga/${id}/render/${page}`,
+        { method: "POST", body: JSON.stringify(config || {}) },
+      ),
+
+    renderAll: (id: number, config?: Partial<RenderConfig>) =>
+      request<{ job_id: string; status: string }>(
+        `/manga/${id}/render-all`,
+        { method: "POST", body: JSON.stringify(config || {}) },
+      ),
+
+    renderAllStatusUrl: (id: number) => `${BASE}/manga/${id}/render-all/status`,
+
+    renderedImageUrl: (id: number, page: number) => `${BASE}/manga/${id}/rendered/${page}`,
+
+    renderStatus: (id: number) =>
+      request<MangaRenderStatus>(`/manga/${id}/render-status`),
+
+    fonts: () =>
+      request<{ fonts: FontInfo[] }>("/manga/fonts"),
+
+    downloadFont: (fontId: string) =>
+      request<{ ok: boolean }>(`/manga/fonts/${fontId}/download`, { method: "POST" }),
+
+    updatePositions: (id: number, page: number, positions: MangaTranslationEntry[]) =>
+      request<{ ok: boolean; count: number }>(`/manga/${id}/translation/${page}`, {
+        method: "PATCH",
+        body: JSON.stringify({ positions }),
+      }),
+
+    translateRegion: (id: number, page: number, region: { x: number; y: number; width: number; height: number }) =>
+      request<MangaTranslationEntry>(`/manga/${id}/translate-region`, {
+        method: "POST",
+        body: JSON.stringify({ page, ...region }),
+      }),
+  },
+
+  folders: {
+    list: () => request<GameFolder[]>("/folders"),
+    create: (data: { name: string }) =>
+      request<GameFolder>("/folders", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: { name?: string; sort_order?: number }) =>
+      request<GameFolder>(`/folders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: number) =>
+      request<{ ok: boolean }>(`/folders/${id}`, { method: "DELETE" }),
+  },
+
+  agent: {
+    start: (gameId: number, data: { api_key: string; provider?: string; model?: string; max_turns?: number; instructions?: string }) =>
+      request<{ job_id: string; status: string; model: string; max_turns: number }>(`/games/${gameId}/agent`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    message: (gameId: number, text: string) =>
+      request<{ ok: boolean }>(`/games/${gameId}/agent/message`, {
+        method: "POST",
+        body: JSON.stringify({ text }),
+      }),
+
+    cancel: (gameId: number) =>
+      request<{ ok: boolean }>(`/games/${gameId}/agent/cancel`, { method: "POST" }),
+
+    statusUrl: (gameId: number) => `${BASE}/games/${gameId}/agent/status`,
+    pollUrl: (gameId: number) => `/api/games/${gameId}/agent/poll`,
+  },
+
+  filesystem: {
+    browse: (path: string = "", filter?: string, foldersOnly?: boolean) => {
+      const params = new URLSearchParams()
+      if (path) params.set("path", path)
+      if (filter) params.set("filter", filter)
+      if (foldersOnly) params.set("folders_only", "true")
+      return request<{
+        path: string
+        parent: string | null
+        entries: Array<{
+          name: string
+          path: string
+          type: "drive" | "folder" | "file"
+          size: number | null
+          modified: string | null
+        }>
+        error?: string
+      }>(`/filesystem/browse?${params}`)
+    },
+  },
+
+  subtitle: {
+    create: (data: { media_id: number; media_type: string; label?: string; source_lang?: string; target_lang?: string }) =>
+      request<SubtitleSet>("/subtitle/create", { method: "POST", body: JSON.stringify(data) }),
+
+    list: (mediaType: string, mediaId: number) =>
+      request<{ subtitles: SubtitleSet[] }>(`/subtitle/list/${mediaType}/${mediaId}`),
+
+    delete: (subtitleId: number) =>
+      request<{ ok: boolean }>(`/subtitle/${subtitleId}`, { method: "DELETE" }),
+
+    extractAudio: (mediaId: number, mediaType: string) =>
+      request<{ path: string; size: number }>("/subtitle/extract-audio", {
+        method: "POST",
+        body: JSON.stringify({ media_id: mediaId, media_type: mediaType }),
+      }),
+
+    startSTT: (data: { subtitle_id: number; provider?: string; model?: string; language?: string }) =>
+      request<SubtitleJobStatus>("/subtitle/stt", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    sttStatusUrl: (jobId: string) => `${BASE}/subtitle/stt/${jobId}/status`,
+
+    analyzeVideo: (subtitleId: number, data: { provider?: string; model?: string }) =>
+      request<{ context: string }>(`/subtitle/${subtitleId}/analyze`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    startTranslate: (subtitleId: number, data: { source_lang?: string; target_lang?: string; provider?: string; model?: string; context_window?: number; context_overlap?: number; context?: string }) =>
+      request<SubtitleJobStatus>(`/subtitle/${subtitleId}/translate`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    translateStatusUrl: (jobId: string) => `${BASE}/subtitle/translate/${jobId}/status`,
+
+    getSegments: (subtitleId: number) =>
+      request<{ segments: SubtitleSegment[]; subtitle: SubtitleSet }>(`/subtitle/${subtitleId}/segments`),
+
+    updateSegment: (segmentId: number, data: Partial<Pick<SubtitleSegment, "original_text" | "translated_text" | "start_time" | "end_time" | "pos_x" | "pos_y">>) =>
+      request<SubtitleSegment>(`/subtitle/segments/${segmentId}`, {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }),
+
+    bulkUpdatePosition: (subtitleId: number, posX: number | null, posY: number | null) =>
+      request<{ segments: SubtitleSegment[] }>(`/subtitle/${subtitleId}/segments/position`, {
+        method: "PUT",
+        body: JSON.stringify({ pos_x: posX, pos_y: posY }),
+      }),
+
+    createSegment: (subtitleId: number, data: { start_time: number; end_time: number; original_text?: string; translated_text?: string }) =>
+      request<SubtitleSegment>(`/subtitle/${subtitleId}/segments`, {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+
+    deleteSegment: (segmentId: number) =>
+      request<{ ok: boolean }>(`/subtitle/segments/${segmentId}`, { method: "DELETE" }),
+
+    splitSegment: (segmentId: number, splitTime: number) =>
+      request<SubtitleSegment>(`/subtitle/segments/${segmentId}/split`, {
+        method: "POST",
+        body: JSON.stringify({ split_time: splitTime }),
+      }),
+
+    exportBlob: async (subtitleId: number, options: SubtitleExportOptions): Promise<{ blob: Blob; filename: string }> => {
+      const res = await fetch(`${BASE}/subtitle/${subtitleId}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(options),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      const filename = match?.[1] || `subtitle_${subtitleId}.${options.format}`
+      return { blob, filename }
+    },
+
+    importFile: async (file: File, mediaId: number, mediaType: string, label?: string, sourceLang?: string): Promise<{ subtitle: SubtitleSet; segments_imported: number; format: string }> => {
+      const form = new FormData()
+      form.append("file", file)
+      // URL params for the body fields since we use multipart
+      const params = new URLSearchParams()
+      params.set("media_id", String(mediaId))
+      params.set("media_type", mediaType)
+      if (label) params.set("label", label)
+      if (sourceLang) params.set("source_lang", sourceLang)
+
+      const res = await fetch(`${BASE}/subtitle/import?${params}`, {
+        method: "POST",
+        body: form,
+      })
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`
+        try { const err = await res.json(); msg = err.detail || msg } catch {}
+        throw new Error(msg)
+      }
+      return res.json()
+    },
+
+    // Glossary
+    getGlossary: (subtitleId: number) =>
+      request<{ entries: SubtitleGlossaryEntry[] }>(`/subtitle/${subtitleId}/glossary`),
+
+    upsertGlossary: (subtitleId: number, entry: { source: string; target: string; category?: string }) =>
+      request<SubtitleGlossaryEntry>(`/subtitle/${subtitleId}/glossary`, {
+        method: "POST",
+        body: JSON.stringify(entry),
+      }),
+
+    bulkUpsertGlossary: (subtitleId: number, entries: Array<{ source: string; target: string; category?: string }>) =>
+      request<{ count: number }>(`/subtitle/${subtitleId}/glossary/bulk`, {
+        method: "POST",
+        body: JSON.stringify({ entries }),
+      }),
+
+    deleteGlossary: (glossaryId: number) =>
+      request<{ ok: boolean }>(`/subtitle/glossary/${glossaryId}`, { method: "DELETE" }),
+
+    // Waveform
+    getWaveform: (mediaType: string, mediaId: number, samples?: number) =>
+      request<{ peaks: number[]; duration: number }>(`/subtitle/waveform/${mediaType}/${mediaId}${samples ? `?samples=${samples}` : ""}`),
+
+    cancelJob: (jobId: string) =>
+      request<{ ok: boolean }>(`/subtitle/job/${jobId}/cancel`, { method: "POST" }),
+
+    startSync: (subtitleId: number) =>
+      request<{ job_id: string; status: string }>(`/subtitle/${subtitleId}/sync`, { method: "POST" }),
+
+    syncStatusUrl: (jobId: string) => `${BASE}/subtitle/sync/${jobId}/status`,
+
+    startHardsub: (subtitleId: number, style?: Partial<SubtitleStyleOptions>) =>
+      request<SubtitleJobStatus>(`/subtitle/${subtitleId}/hardsub`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(style || {}),
+      }),
+
+    hardsubStatusUrl: (jobId: string) => `${BASE}/subtitle/hardsub/${jobId}/status`,
+
+    downloadHardsub: async (jobId: string): Promise<{ blob: Blob; filename: string }> => {
+      const res = await fetch(`${BASE}/subtitle/hardsub/${jobId}/download`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const blob = await res.blob()
+      const disposition = res.headers.get("Content-Disposition") || ""
+      const match = disposition.match(/filename="?([^"]+)"?/)
+      const filename = match?.[1] || `hardsub_${jobId}.mp4`
+      return { blob, filename }
+    },
   },
 
   health: () => request<{ status: string }>("/health"),

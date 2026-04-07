@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback, type ReactNode } from "react"
-import { LockIcon, ExternalLinkIcon, ChevronDownIcon, Loader2Icon, CheckCircleIcon } from "lucide-react"
+import { LockIcon, ExternalLinkIcon, ChevronDownIcon, Loader2Icon, CheckCircleIcon, XIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useLocale } from "@/hooks/use-locale"
@@ -13,10 +13,14 @@ interface PaywallProps {
   show: boolean
   children: ReactNode
   onLicenseVerified?: () => void
+  onDismiss?: () => void
+  /** Allow user to dismiss the paywall with X button (default: true) */
+  dismissable?: boolean
 }
 
-export function Paywall({ show, children, onLicenseVerified }: PaywallProps) {
+export function Paywall({ show, children, onLicenseVerified, onDismiss, dismissable = true }: PaywallProps) {
   const { t } = useLocale()
+  const [dismissed, setDismissed] = useState(false)
   const [showKeyInput, setShowKeyInput] = useState(false)
   const [key, setKey] = useState("")
   const [verifying, setVerifying] = useState(false)
@@ -44,7 +48,7 @@ export function Paywall({ show, children, onLicenseVerified }: PaywallProps) {
     }
   }, [key, onLicenseVerified, t])
 
-  if (!show) return <>{children}</>
+  if (!show || (dismissable && dismissed)) return <>{children}</>
 
   return (
     <div className="relative">
@@ -55,7 +59,15 @@ export function Paywall({ show, children, onLicenseVerified }: PaywallProps) {
 
       {/* Overlay card */}
       <div className="absolute inset-0 flex items-center justify-center z-10">
-        <Card className="bg-surface/95 backdrop-blur-sm border-overlay-6 w-full max-w-sm mx-4 shadow-xl">
+        <Card className="bg-surface/95 backdrop-blur-sm border-overlay-6 w-full max-w-sm mx-4 shadow-xl relative">
+          {dismissable && (
+            <button
+              onClick={() => { setDismissed(true); onDismiss?.() }}
+              className="absolute top-3 right-3 p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-overlay-4 transition-colors"
+            >
+              <XIcon className="size-4" />
+            </button>
+          )}
           <CardContent className="p-6 space-y-4 text-center">
             <div className="mx-auto size-12 rounded-full bg-accent/10 flex items-center justify-center">
               <LockIcon className="size-6 text-accent" />

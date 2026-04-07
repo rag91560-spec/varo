@@ -175,124 +175,88 @@ export function useTranslationProgress(gameId: number | null) {
   })
   const [status, setStatus] = useState<string>("idle")
   const [message, setMessage] = useState("")
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const retryCountRef = useRef(0)
-  const MAX_RETRIES = 3
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const connect = useCallback(() => {
-    if (gameId === null) return
-
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-
-    const url = api.translate.statusUrl(gameId)
-    const es = new EventSource(url)
-    eventSourceRef.current = es
-
-    setStatus("connecting")
-
-    es.addEventListener("progress", (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        if (data && typeof data.progress === "number") {
-          retryCountRef.current = 0
-          setProgress({
-            progress: data.progress,
-            translated: data.translated,
-            total: data.total,
-            status: data.status,
-            message: data.message,
-            current_index: data.current_index,
-            current_original: data.current_original,
-            current_translated: data.current_translated,
-          })
-          setStatus(data.status || "running")
-          const msg = _resolveSSEMessage(data)
-          if (msg) setMessage(msg)
-        }
-      } catch { /* ignore malformed SSE data */ }
-    })
-
-    es.addEventListener("complete", (e) => {
-      try {
-        const data = JSON.parse(e.data)
-        if (data) {
-          setProgress(data)
-          const msg = _resolveSSEMessage(data)
-          if (msg) setMessage(msg)
-        }
-      } catch { /* ignore */ }
-      retryCountRef.current = 0
-      setStatus("completed")
-      es.close()
-    })
-
-    es.addEventListener("error", (e) => {
-      if (e instanceof MessageEvent) {
-        try {
-          const data = JSON.parse(e.data)
-          const msg = _resolveSSEMessage(data)
-          setMessage(msg || "Error")
-        } catch { /* ignore */ }
-      }
-      retryCountRef.current = 0
-      setStatus("error")
-      es.close()
-    })
-
-    es.addEventListener("cancelled", () => {
-      retryCountRef.current = 0
-      setStatus("cancelled")
-      es.close()
-    })
-
-    es.addEventListener("idle", () => {
-      retryCountRef.current = 0
-      setStatus("idle")
-      es.close()
-      eventSourceRef.current = null
-    })
-
-    es.addEventListener("heartbeat", () => {
-      retryCountRef.current = 0
-    })
-
-    es.onerror = () => {
-      es.close()
-      eventSourceRef.current = null
-      if (retryCountRef.current < MAX_RETRIES) {
-        retryCountRef.current++
-        const delay = 2000 * retryCountRef.current
-        setTimeout(() => {
-          if (gameId !== null) connect()
-        }, delay)
-      } else {
-        retryCountRef.current = 0
-        // Check if backend still has a running job before giving up
-        setStatus("idle")
-      }
-    }
-  }, [gameId])
-
-  const disconnect = useCallback(() => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current)
+      pollRef.current = null
     }
   }, [])
 
+  const startPolling = useCallback(() => {
+    if (gameId === null) return
+    stopPolling()
+    let idleCount = 0
+
+    const poll = async () => {
+      try {
+        const res = await fetch(api.translate.pollUrl(gameId))
+        if (!res.ok) return
+        const data = await res.json()
+
+        if (data.status === "running") {
+          idleCount = 0
+          setProgress({
+            progress: data.progress ?? 0,
+            translated: data.translated ?? 0,
+            total: data.total ?? 0,
+          })
+          setStatus("running")
+          if (data.message) setMessage(data.message)
+        } else if (data.status === "completed") {
+          setProgress({
+            progress: data.progress ?? 100,
+            translated: data.translated ?? 0,
+            total: data.total ?? 0,
+          })
+          setStatus("completed")
+          if (data.message) setMessage(data.message)
+          stopPolling()
+        } else if (data.status === "error") {
+          setMessage(data.error_message || data.message || "Error")
+          setStatus("error")
+          stopPolling()
+        } else if (data.status === "cancelled") {
+          setStatus("cancelled")
+          stopPolling()
+        } else {
+          // idle — job might not be registered yet, wait a bit
+          idleCount++
+          if (idleCount > 20) {
+            // 30s of idle = give up
+            setStatus("idle")
+            stopPolling()
+          }
+        }
+      } catch { /* ignore network errors */ }
+    }
+
+    // Poll immediately, then every 1.5s
+    poll()
+    pollRef.current = setInterval(poll, 1500)
+  }, [gameId, stopPolling])
+
+  const connect = useCallback(() => {
+    if (gameId === null) return
+    setStatus("running")
+    startPolling()
+  }, [gameId, startPolling])
+
+  const disconnect = useCallback(() => {
+    stopPolling()
+  }, [stopPolling])
+
   const reset = useCallback(() => {
-    disconnect()
+    stopPolling()
     setProgress({ progress: 0, translated: 0, total: 0 })
     setStatus("idle")
     setMessage("")
-  }, [disconnect])
+  }, [stopPolling])
 
   useEffect(() => {
-    return () => disconnect()
-  }, [disconnect])
+    return () => stopPolling()
+  }, [stopPolling])
 
   return { progress, status, message, connect, disconnect, reset }
 }

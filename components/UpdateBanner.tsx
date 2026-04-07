@@ -30,6 +30,7 @@ export function UpdateBanner() {
 
     const cleanupAvailable = api.onUpdateAvailable?.((info: UpdateInfo) => {
       setUpdateInfo(info)
+      setDownloading(true) // autoDownload=true, 즉시 다운로드 시작
     })
 
     const cleanupProgress = api.onUpdateProgress?.((p: UpdateProgress) => {

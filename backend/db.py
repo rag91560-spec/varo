@@ -37,7 +37,7 @@ _PRESET_COLUMNS = frozenset({
 # Settings keys that users may write via PUT /api/settings
 _SETTINGS_ALLOWED_KEYS = frozenset({
     "api_keys", "scan_directories", "default_provider", "default_source_lang",
-    "license_key", "app_version",
+    "license_key", "app_version", "fallback_providers",
 })
 
 
@@ -259,6 +259,16 @@ CREATE TABLE IF NOT EXISTS manga_translations (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_manga_trans_page ON manga_translations(manga_id, page);
+CREATE TABLE IF NOT EXISTS manga_renders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    manga_id INTEGER NOT NULL REFERENCES manga(id) ON DELETE CASCADE,
+    page INTEGER NOT NULL,
+    inpaint_mode TEXT DEFAULT 'telea',
+    font_id TEXT DEFAULT 'noto-sans-kr',
+    rendered_path TEXT DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(manga_id, page)
+);
 CREATE TABLE IF NOT EXISTS audio_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
@@ -284,6 +294,7 @@ ALTER TABLE videos ADD COLUMN category_id INTEGER DEFAULT NULL;
 ALTER TABLE audio_items ADD COLUMN script_text TEXT DEFAULT '';
 ALTER TABLE audio_items ADD COLUMN translated_script TEXT DEFAULT '';
 ALTER TABLE games ADD COLUMN aes_key TEXT DEFAULT '';
+ALTER TABLE manga ADD COLUMN category_id INTEGER DEFAULT NULL;
 CREATE TABLE IF NOT EXISTS folders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -291,6 +302,77 @@ CREATE TABLE IF NOT EXISTS folders (
     created_at TEXT NOT NULL
 );
 ALTER TABLE games ADD COLUMN folder_id INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS subtitles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    media_id INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    label TEXT DEFAULT '',
+    source_lang TEXT DEFAULT '',
+    target_lang TEXT DEFAULT '',
+    stt_provider TEXT DEFAULT '',
+    stt_model TEXT DEFAULT '',
+    status TEXT DEFAULT 'pending',
+    duration REAL DEFAULT 0,
+    segment_count INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS subtitle_segments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subtitle_id INTEGER NOT NULL REFERENCES subtitles(id) ON DELETE CASCADE,
+    seq INTEGER NOT NULL,
+    start_time REAL NOT NULL,
+    end_time REAL NOT NULL,
+    original_text TEXT DEFAULT '',
+    translated_text TEXT DEFAULT '',
+    confidence REAL DEFAULT 0,
+    edited INTEGER DEFAULT 0,
+    UNIQUE(subtitle_id, seq)
+);
+CREATE INDEX IF NOT EXISTS idx_subtitle_segments_sub ON subtitle_segments(subtitle_id);
+CREATE TABLE IF NOT EXISTS subtitle_jobs (
+    id TEXT PRIMARY KEY,
+    subtitle_id INTEGER REFERENCES subtitles(id) ON DELETE SET NULL,
+    media_id INTEGER NOT NULL,
+    media_type TEXT NOT NULL,
+    job_type TEXT NOT NULL,
+    status TEXT DEFAULT 'pending',
+    progress REAL DEFAULT 0,
+    error_message TEXT DEFAULT '',
+    cost_usd REAL DEFAULT 0,
+    started_at TEXT,
+    completed_at TEXT
+);
+ALTER TABLE videos ADD COLUMN subtitle_id INTEGER DEFAULT NULL;
+ALTER TABLE audio_items ADD COLUMN subtitle_id INTEGER DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS agent_sessions (
+    id TEXT PRIMARY KEY,
+    game_id INTEGER NOT NULL,
+    status TEXT DEFAULT 'running',
+    model TEXT DEFAULT '',
+    turns INTEGER DEFAULT 0,
+    max_turns INTEGER DEFAULT 20,
+    input_tokens INTEGER DEFAULT 0,
+    output_tokens INTEGER DEFAULT 0,
+    messages_json TEXT DEFAULT '[]',
+    result_summary TEXT DEFAULT '',
+    error_message TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT
+);
+ALTER TABLE subtitle_segments ADD COLUMN pos_x REAL DEFAULT NULL;
+ALTER TABLE subtitle_segments ADD COLUMN pos_y REAL DEFAULT NULL;
+CREATE TABLE IF NOT EXISTS subtitle_glossary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subtitle_id INTEGER NOT NULL REFERENCES subtitles(id) ON DELETE CASCADE,
+    source TEXT NOT NULL,
+    target TEXT NOT NULL,
+    category TEXT DEFAULT 'general',
+    auto_generated INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(subtitle_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_subtitle_glossary_sub ON subtitle_glossary(subtitle_id);
 """
 
 
@@ -1027,6 +1109,21 @@ _AUDIO_COLUMNS = frozenset({
     "category_id", "updated_at", "script_text", "translated_script",
 })
 
+_SUBTITLE_COLUMNS = frozenset({
+    "label", "source_lang", "target_lang", "stt_provider", "stt_model",
+    "status", "duration", "segment_count", "updated_at",
+})
+
+_SUBTITLE_SEGMENT_COLUMNS = frozenset({
+    "start_time", "end_time", "original_text", "translated_text",
+    "confidence", "edited", "pos_x", "pos_y",
+})
+
+_SUBTITLE_JOB_COLUMNS = frozenset({
+    "status", "progress", "error_message", "cost_usd",
+    "started_at", "completed_at",
+})
+
 _CATEGORY_COLUMNS = frozenset({
     "name", "media_type", "sort_order", "updated_at",
 })
@@ -1089,21 +1186,29 @@ async def delete_video(video_id: int) -> bool:
 # --- Manga ---
 
 _MANGA_COLUMNS = frozenset({
-    "title", "artist", "tags", "page_count", "thumbnail_path", "updated_at",
+    "title", "artist", "tags", "page_count", "thumbnail_path", "category_id", "updated_at",
 })
 
 
 async def list_manga(search: str = "", source_type: str = "") -> list[dict]:
     async with get_db() as db:
-        q = "SELECT * FROM manga WHERE 1=1"
+        q = """SELECT m.*,
+                      COALESCE(tp.translated_pages, 0) AS translated_pages
+               FROM manga m
+               LEFT JOIN (
+                   SELECT manga_id, COUNT(DISTINCT page) AS translated_pages
+                   FROM manga_translations
+                   GROUP BY manga_id
+               ) tp ON tp.manga_id = m.id
+               WHERE 1=1"""
         params: list = []
         if search:
-            q += " AND (title LIKE ? OR artist LIKE ? OR tags LIKE ?)"
+            q += " AND (m.title LIKE ? OR m.artist LIKE ? OR m.tags LIKE ?)"
             params.extend([f"%{search}%", f"%{search}%", f"%{search}%"])
         if source_type:
-            q += " AND source_type = ?"
+            q += " AND m.source_type = ?"
             params.append(source_type)
-        q += " ORDER BY created_at DESC"
+        q += " ORDER BY m.created_at DESC"
         rows = await db.execute_fetchall(q, params)
         return [dict(r) for r in rows]
 
@@ -1189,6 +1294,51 @@ async def save_manga_translation(manga_id: int, page: int,
             )
         await db.commit()
     return await get_manga_translation(manga_id, page)
+
+
+# --- Manga Renders ---
+
+async def get_manga_render(manga_id: int, page: int) -> Optional[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM manga_renders WHERE manga_id = ? AND page = ?",
+            (manga_id, page),
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def save_manga_render(manga_id: int, page: int, inpaint_mode: str,
+                            font_id: str, rendered_path: str) -> dict:
+    now = datetime.now(timezone.utc).isoformat()
+    async with get_db() as db:
+        existing = await db.execute_fetchall(
+            "SELECT id FROM manga_renders WHERE manga_id = ? AND page = ?",
+            (manga_id, page),
+        )
+        if existing:
+            await db.execute(
+                """UPDATE manga_renders SET inpaint_mode = ?, font_id = ?,
+                   rendered_path = ?, created_at = ? WHERE id = ?""",
+                (inpaint_mode, font_id, rendered_path, now, existing[0]["id"]),
+            )
+        else:
+            await db.execute(
+                """INSERT INTO manga_renders
+                   (manga_id, page, inpaint_mode, font_id, rendered_path, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (manga_id, page, inpaint_mode, font_id, rendered_path, now),
+            )
+        await db.commit()
+    return await get_manga_render(manga_id, page)
+
+
+async def list_manga_renders(manga_id: int) -> list[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM manga_renders WHERE manga_id = ? ORDER BY page ASC",
+            (manga_id,),
+        )
+        return [dict(r) for r in rows]
 
 
 # --- Audio Items ---
@@ -1311,6 +1461,7 @@ async def clear_category_from_items(cat_id: int):
     async with get_db() as db:
         await db.execute("UPDATE videos SET category_id = NULL WHERE category_id = ?", (cat_id,))
         await db.execute("UPDATE audio_items SET category_id = NULL WHERE category_id = ?", (cat_id,))
+        await db.execute("UPDATE manga SET category_id = NULL WHERE category_id = ?", (cat_id,))
         await db.commit()
 
 
@@ -1334,9 +1485,20 @@ async def bulk_move_audio(audio_ids: list[int], category_id: int | None):
         await db.commit()
 
 
+async def bulk_move_manga(manga_ids: list[int], category_id: int | None):
+    async with get_db() as db:
+        placeholders = ",".join("?" * len(manga_ids))
+        await db.execute(
+            f"UPDATE manga SET category_id = ? WHERE id IN ({placeholders})",
+            [category_id] + manga_ids,
+        )
+        await db.commit()
+
+
 async def count_items_by_category(media_type: str) -> dict[int | None, int]:
     """카테고리별 아이템 수 반환"""
-    table = "videos" if media_type == "video" else "audio_items"
+    table_map = {"video": "videos", "audio": "audio_items", "manga": "manga"}
+    table = table_map.get(media_type, "videos")
     async with get_db() as db:
         rows = await db.execute_fetchall(
             f"SELECT category_id, COUNT(*) as cnt FROM {table} GROUP BY category_id"
@@ -1417,3 +1579,357 @@ async def save_license_cache(valid: bool, plan: str, is_admin: bool) -> None:
                 (key, value),
             )
         await db.commit()
+
+
+# --- Agent Sessions ---
+
+async def create_agent_session(session_id: str, game_id: int, model: str = "",
+                                max_turns: int = 20) -> dict:
+    now = _now()
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO agent_sessions (id, game_id, status, model, max_turns, created_at)
+               VALUES (?, ?, 'running', ?, ?, ?)""",
+            (session_id, game_id, model, max_turns, now),
+        )
+        await db.commit()
+    return {"id": session_id, "game_id": game_id, "status": "running"}
+
+
+async def update_agent_session(session_id: str, **fields) -> None:
+    allowed = {"status", "turns", "input_tokens", "output_tokens",
+               "messages_json", "result_summary", "error_message", "completed_at"}
+    fields = {k: v for k, v in fields.items() if k in allowed}
+    if not fields:
+        return
+    sets = ", ".join(f"{k} = ?" for k in fields)
+    vals = list(fields.values()) + [session_id]
+    async with get_db() as db:
+        await db.execute(f"UPDATE agent_sessions SET {sets} WHERE id = ?", vals)
+        await db.commit()
+
+
+async def get_agent_session(session_id: str) -> Optional[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM agent_sessions WHERE id = ?", (session_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def get_latest_agent_session(game_id: int) -> Optional[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM agent_sessions WHERE game_id = ? ORDER BY created_at DESC LIMIT 1",
+            (game_id,),
+        )
+        return dict(rows[0]) if rows else None
+
+
+# --- Subtitles ---
+
+async def create_subtitle(media_id: int, media_type: str, **fields) -> dict:
+    now = _now()
+    async with get_db() as db:
+        cursor = await db.execute(
+            """INSERT INTO subtitles (media_id, media_type, label, source_lang, target_lang,
+               stt_provider, stt_model, status, duration, segment_count, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (media_id, media_type, fields.get("label", ""),
+             fields.get("source_lang", ""), fields.get("target_lang", ""),
+             fields.get("stt_provider", ""), fields.get("stt_model", ""),
+             fields.get("status", "pending"), fields.get("duration", 0),
+             fields.get("segment_count", 0), now, now),
+        )
+        await db.commit()
+        sub_id = cursor.lastrowid
+    return await get_subtitle(sub_id)
+
+
+async def get_subtitle(subtitle_id: int) -> Optional[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitles WHERE id = ?", (subtitle_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def list_subtitles(media_id: int = None, media_type: str = "") -> list[dict]:
+    async with get_db() as db:
+        q = "SELECT * FROM subtitles WHERE 1=1"
+        params: list = []
+        if media_id is not None:
+            q += " AND media_id = ?"
+            params.append(media_id)
+        if media_type:
+            q += " AND media_type = ?"
+            params.append(media_type)
+        q += " ORDER BY created_at DESC"
+        rows = await db.execute_fetchall(q, params)
+        return [dict(r) for r in rows]
+
+
+async def update_subtitle(subtitle_id: int, **fields) -> Optional[dict]:
+    if not fields:
+        return await get_subtitle(subtitle_id)
+    fields = _validate_columns(fields, _SUBTITLE_COLUMNS, "subtitles")
+    if not fields:
+        return await get_subtitle(subtitle_id)
+    fields["updated_at"] = _now()
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [subtitle_id]
+    async with get_db() as db:
+        await db.execute(f"UPDATE subtitles SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+    return await get_subtitle(subtitle_id)
+
+
+async def delete_subtitle(subtitle_id: int) -> bool:
+    async with get_db() as db:
+        cursor = await db.execute("DELETE FROM subtitles WHERE id = ?", (subtitle_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# --- Subtitle Segments ---
+
+async def insert_subtitle_segments(subtitle_id: int, segments: list[dict]) -> int:
+    """Bulk insert segments. Returns count inserted."""
+    if not segments:
+        return 0
+    rows = [
+        (subtitle_id, seg.get("seq", i), seg["start_time"], seg["end_time"],
+         seg.get("original_text", ""), seg.get("translated_text", ""),
+         seg.get("confidence", 0), seg.get("edited", 0))
+        for i, seg in enumerate(segments)
+    ]
+    async with get_db() as db:
+        await db.executemany(
+            """INSERT OR REPLACE INTO subtitle_segments
+               (subtitle_id, seq, start_time, end_time, original_text, translated_text, confidence, edited)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+        await db.commit()
+        # Update segment count on parent
+        await db.execute(
+            "UPDATE subtitles SET segment_count = ?, updated_at = ? WHERE id = ?",
+            (len(rows), _now(), subtitle_id),
+        )
+        await db.commit()
+    return len(rows)
+
+
+async def get_subtitle_segments(subtitle_id: int) -> list[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_segments WHERE subtitle_id = ? ORDER BY seq ASC",
+            (subtitle_id,),
+        )
+        return [dict(r) for r in rows]
+
+
+async def update_subtitle_segment(segment_id: int, **fields) -> Optional[dict]:
+    fields = _validate_columns(fields, _SUBTITLE_SEGMENT_COLUMNS, "subtitle_segments")
+    if not fields:
+        return None
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [segment_id]
+    async with get_db() as db:
+        await db.execute(f"UPDATE subtitle_segments SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_segments WHERE id = ?", (segment_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def delete_subtitle_segments(subtitle_id: int) -> int:
+    async with get_db() as db:
+        cursor = await db.execute(
+            "DELETE FROM subtitle_segments WHERE subtitle_id = ?", (subtitle_id,)
+        )
+        await db.commit()
+        return cursor.rowcount
+
+
+# --- Subtitle Segment CRUD ---
+
+async def create_subtitle_segment(subtitle_id: int, seq: int = -1,
+                                   start_time: float = 0, end_time: float = 0,
+                                   original_text: str = "",
+                                   translated_text: str = "") -> dict:
+    """Create a single segment and update parent segment_count."""
+    async with get_db() as db:
+        if seq < 0:
+            # Auto-assign seq as max+1
+            rows = await db.execute_fetchall(
+                "SELECT COALESCE(MAX(seq), -1) as mx FROM subtitle_segments WHERE subtitle_id = ?",
+                (subtitle_id,),
+            )
+            seq = (rows[0]["mx"] if rows else -1) + 1
+        cursor = await db.execute(
+            """INSERT INTO subtitle_segments
+               (subtitle_id, seq, start_time, end_time, original_text, translated_text, confidence, edited)
+               VALUES (?, ?, ?, ?, ?, ?, 0, 0)""",
+            (subtitle_id, seq, start_time, end_time, original_text, translated_text),
+        )
+        await db.commit()
+        seg_id = cursor.lastrowid
+        # Update segment_count
+        rows = await db.execute_fetchall(
+            "SELECT COUNT(*) as cnt FROM subtitle_segments WHERE subtitle_id = ?",
+            (subtitle_id,),
+        )
+        count = rows[0]["cnt"] if rows else 0
+        await db.execute(
+            "UPDATE subtitles SET segment_count = ?, updated_at = ? WHERE id = ?",
+            (count, _now(), subtitle_id),
+        )
+        await db.commit()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_segments WHERE id = ?", (seg_id,)
+        )
+        return dict(rows[0]) if rows else {}
+
+
+async def delete_subtitle_segment(segment_id: int) -> Optional[int]:
+    """Delete a single segment, update parent segment_count. Returns subtitle_id or None."""
+    async with get_db() as db:
+        # Get subtitle_id first
+        rows = await db.execute_fetchall(
+            "SELECT subtitle_id FROM subtitle_segments WHERE id = ?", (segment_id,)
+        )
+        if not rows:
+            return None
+        subtitle_id = rows[0]["subtitle_id"]
+        await db.execute("DELETE FROM subtitle_segments WHERE id = ?", (segment_id,))
+        await db.commit()
+        # Update segment_count
+        rows = await db.execute_fetchall(
+            "SELECT COUNT(*) as cnt FROM subtitle_segments WHERE subtitle_id = ?",
+            (subtitle_id,),
+        )
+        count = rows[0]["cnt"] if rows else 0
+        await db.execute(
+            "UPDATE subtitles SET segment_count = ?, updated_at = ? WHERE id = ?",
+            (count, _now(), subtitle_id),
+        )
+        await db.commit()
+        return subtitle_id
+
+
+async def reorder_subtitle_segments(subtitle_id: int) -> int:
+    """Reorder segments by start_time, reassigning seq values. Returns count."""
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT id FROM subtitle_segments WHERE subtitle_id = ? ORDER BY start_time ASC",
+            (subtitle_id,),
+        )
+        # First pass: set all to negative temp values to avoid UNIQUE conflicts
+        for i, row in enumerate(rows):
+            await db.execute(
+                "UPDATE subtitle_segments SET seq = ? WHERE id = ?",
+                (-(i + 1), row["id"]),
+            )
+        # Second pass: set final values
+        for i, row in enumerate(rows):
+            await db.execute(
+                "UPDATE subtitle_segments SET seq = ? WHERE id = ?",
+                (i, row["id"]),
+            )
+        await db.commit()
+        return len(rows)
+
+
+# --- Subtitle Jobs ---
+
+async def create_subtitle_job(job_id: str, subtitle_id: int, media_id: int,
+                               media_type: str, job_type: str) -> dict:
+    now = _now()
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO subtitle_jobs (id, subtitle_id, media_id, media_type, job_type, status, started_at)
+               VALUES (?, ?, ?, ?, ?, 'running', ?)""",
+            (job_id, subtitle_id, media_id, media_type, job_type, now),
+        )
+        await db.commit()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_jobs WHERE id = ?", (job_id,)
+        )
+        return dict(rows[0])
+
+
+async def update_subtitle_job(job_id: str, **fields) -> Optional[dict]:
+    fields = _validate_columns(fields, _SUBTITLE_JOB_COLUMNS, "subtitle_jobs")
+    if not fields:
+        return None
+    set_clause = ", ".join(f"{k} = ?" for k in fields)
+    values = list(fields.values()) + [job_id]
+    async with get_db() as db:
+        await db.execute(f"UPDATE subtitle_jobs SET {set_clause} WHERE id = ?", values)
+        await db.commit()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_jobs WHERE id = ?", (job_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+async def get_subtitle_job(job_id: str) -> Optional[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_jobs WHERE id = ?", (job_id,)
+        )
+        return dict(rows[0]) if rows else None
+
+
+# --- Subtitle Glossary ---
+
+async def get_subtitle_glossary(subtitle_id: int) -> list[dict]:
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_glossary WHERE subtitle_id = ? ORDER BY category, source",
+            (subtitle_id,),
+        )
+        return [dict(r) for r in rows]
+
+
+async def upsert_subtitle_glossary(subtitle_id: int, source: str, target: str,
+                                     category: str = "general", auto_generated: int = 0) -> dict:
+    async with get_db() as db:
+        await db.execute(
+            """INSERT INTO subtitle_glossary (subtitle_id, source, target, category, auto_generated, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(subtitle_id, source) DO UPDATE SET target=excluded.target, category=excluded.category""",
+            (subtitle_id, source, target, category, auto_generated, _now()),
+        )
+        await db.commit()
+        rows = await db.execute_fetchall(
+            "SELECT * FROM subtitle_glossary WHERE subtitle_id = ? AND source = ?",
+            (subtitle_id, source),
+        )
+        return dict(rows[0]) if rows else {}
+
+
+async def delete_subtitle_glossary(glossary_id: int) -> bool:
+    async with get_db() as db:
+        cursor = await db.execute("DELETE FROM subtitle_glossary WHERE id = ?", (glossary_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+async def bulk_upsert_subtitle_glossary(subtitle_id: int, entries: list[dict]) -> int:
+    """Bulk upsert glossary entries. Each entry: {source, target, category?, auto_generated?}."""
+    count = 0
+    async with get_db() as db:
+        for entry in entries:
+            await db.execute(
+                """INSERT INTO subtitle_glossary (subtitle_id, source, target, category, auto_generated, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(subtitle_id, source) DO UPDATE SET target=excluded.target, category=excluded.category""",
+                (subtitle_id, entry["source"], entry["target"],
+                 entry.get("category", "general"), entry.get("auto_generated", 0), _now()),
+            )
+            count += 1
+        await db.commit()
+    return count

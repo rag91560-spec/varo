@@ -22,6 +22,23 @@ import type { TranslationProgress } from "@/lib/types"
 
 type TabMode = "offline" | "ai"
 
+// Engines with auto Korean font patching support
+const FONT_SUPPORT_MAP: Record<string, "auto" | "partial" | "none"> = {
+  "RPG Maker MV/MZ": "auto",
+  "RPG Maker MV": "auto",
+  "RPG Maker MZ": "auto",
+  "Unity": "auto",
+  "UE4": "auto",
+  "Ren'Py": "auto",
+  "TyranoScript": "auto",
+  "RPG Maker VX Ace": "auto",
+  "RPG Maker XP": "auto",
+  "GDevelop": "auto",
+  "Godot": "partial",
+  "GameMaker": "partial",
+  "Kirikiri": "partial",
+}
+
 interface TranslationPanelProps {
   game: Game
   gameId: number
@@ -141,6 +158,16 @@ export function TranslationPanel({
           {t("aiTranslation")}
           {!license.valid && <LockIcon className="size-3" />}
         </button>
+      </div>
+
+      {/* Tab description */}
+      <div className="mb-3 space-y-1">
+        <p className="text-xs text-text-tertiary">
+          {tab === "offline" ? t("offlineDesc") : t("aiDesc")}
+        </p>
+        <p className="text-[11px] text-text-tertiary/70 italic">
+          {t("qualityCompare")}
+        </p>
       </div>
 
       {/* Offline tab */}
@@ -286,6 +313,37 @@ export function TranslationPanel({
         </Paywall>
       )}
 
+      {/* Dedup statistics (shown after translation completes) */}
+      {progress.dedup_stats && !isTranslating && (
+        <div className="mt-3 rounded-lg bg-overlay-2 border border-overlay-6 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2">
+            <DatabaseIcon className="size-4 text-accent" />
+            <span className="text-xs font-semibold text-text-primary">Optimization</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-xs">
+            <div>
+              <span className="text-text-tertiary">Total</span>
+              <p className="text-text-primary font-medium">{progress.dedup_stats.total_strings.toLocaleString()}</p>
+            </div>
+            <div>
+              <span className="text-text-tertiary">API Calls</span>
+              <p className="text-accent font-medium">{progress.dedup_stats.api_calls.toLocaleString()}</p>
+            </div>
+            <div>
+              <span className="text-text-tertiary">Saved</span>
+              <p className="text-success font-medium">{progress.dedup_stats.saved_pct}%</p>
+            </div>
+          </div>
+          {(progress.dedup_stats.exact_dedup > 0 || progress.dedup_stats.fuzzy_dedup > 0 || progress.dedup_stats.tm_hits > 0) && (
+            <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-text-tertiary">
+              {progress.dedup_stats.exact_dedup > 0 && <span>Exact dedup: -{progress.dedup_stats.exact_dedup}</span>}
+              {progress.dedup_stats.fuzzy_dedup > 0 && <span>Fuzzy dedup: -{progress.dedup_stats.fuzzy_dedup}</span>}
+              {progress.dedup_stats.tm_hits > 0 && <span>TM hits: {progress.dedup_stats.tm_hits}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* TM import notification */}
       {tmNotification && (
         <div className="mt-3 flex items-center gap-2 text-xs text-accent bg-accent/10 rounded-md px-3 py-2">
@@ -304,11 +362,36 @@ export function TranslationPanel({
           <Button variant="ghost" size="sm" onClick={handleImportTM}>
             <DatabaseIcon className="size-4" /> {t("tmSave")}
           </Button>
-          {game.status === "applied" && (
-            <Button variant="ghost" size="sm" onClick={handleRollback}>
-              <RotateCcwIcon className="size-4" /> {t("rollback")}
-            </Button>
-          )}
+          <Button variant="ghost" size="sm" onClick={handleRollback}>
+            <RotateCcwIcon className="size-4" /> {t("rollback")}
+          </Button>
+        </div>
+      )}
+
+      {/* Font support indicator */}
+      {game.engine && (
+        <div className="mt-3 flex items-center gap-2 text-xs">
+          {(() => {
+            const support = FONT_SUPPORT_MAP[game.engine] ?? "none"
+            if (support === "auto") return (
+              <span className="flex items-center gap-1 text-success">
+                <CheckCircleIcon className="size-3.5" />
+Korean font: Auto
+              </span>
+            )
+            if (support === "partial") return (
+              <span className="flex items-center gap-1 text-warning">
+                <SparklesIcon className="size-3.5" />
+Korean font: Partial
+              </span>
+            )
+            return (
+              <span className="flex items-center gap-1 text-text-tertiary">
+                <XCircleIcon className="size-3.5" />
+Korean font: Not supported
+              </span>
+            )
+          })()}
         </div>
       )}
 

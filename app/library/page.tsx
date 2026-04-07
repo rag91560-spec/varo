@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useCallback, useRef, useEffect } from "react"
+import { useState, useCallback, useRef, useEffect, type DragEvent } from "react"
 import { useRouter } from "next/navigation"
 import {
   FolderOpenIcon,
+  FolderIcon,
   PlusIcon,
   SearchIcon,
   GamepadIcon,
@@ -19,14 +20,19 @@ import {
   FileTextIcon,
   MusicIcon,
   VideoIcon,
+  UploadIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { FolderBrowser } from "@/components/FolderBrowser"
 import { useLocale } from "@/hooks/use-locale"
 import { useGames } from "@/hooks/use-api"
 import { api } from "@/lib/api"
-import type { Game } from "@/lib/types"
+import type { Game, GameFolder } from "@/lib/types"
 import { getProgressPct, getStatusInfo } from "@/lib/utils"
+import { useMergeTarget, getDraggedItem } from "@/hooks/use-media-dnd"
+
+/* ─── Internal DnD data passing via module-level ref (avoids dataTransfer serialization) ─── */
+let draggedGame: Game | null = null
 
 /* ─── Status Badge ─── */
 function StatusBadge({ game }: { game: Game }) {
@@ -54,14 +60,34 @@ function StatusBadge({ game }: { game: Game }) {
 }
 
 /* ─── Game Card (Steam/Epic launcher style) ─── */
-function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
+function GameCard({ game, onClick, onDragStart, onMergeDrop }: { game: Game; onClick: () => void; onDragStart?: (e: DragEvent) => void; onMergeDrop?: (draggedGameId: number) => void }) {
   const pct = getProgressPct(game)
   const hasCover = !!game.cover_path
 
+  const merge = useMergeTarget(
+    useCallback((draggedId: number) => { if (draggedId !== game.id) onMergeDrop?.(draggedId) }, [game.id, onMergeDrop])
+  )
+  const mergeProps = onMergeDrop
+    ? { onDragOver: merge.onDragOver as unknown as (e: DragEvent) => void, onDragLeave: merge.onDragLeave as unknown as (e: DragEvent) => void, onDrop: merge.onDrop as unknown as (e: DragEvent) => void }
+    : {}
+
   return (
     <div
-      className="group cursor-pointer rounded-md overflow-hidden relative transition-all duration-200 ease-out hover:scale-[1.03] hover:border-accent hover:shadow-[0_0_12px_var(--accent-muted)] aspect-[3/4] border-2 border-transparent"
+      className={`group cursor-pointer rounded-md overflow-hidden relative transition-all duration-200 ease-out hover:scale-[1.03] hover:border-accent hover:shadow-[0_0_12px_var(--accent-muted)] aspect-[3/4] border-2 ${
+        merge.showMerge ? "border-accent ring-2 ring-accent/50 animate-pulse" : "border-transparent"
+      }`}
       onClick={onClick}
+      draggable
+      onDragStart={(e) => {
+        // Set a drag image and mark as internal game drag
+        e.dataTransfer.effectAllowed = "move"
+        e.dataTransfer.setData("application/x-game-id", String(game.id))
+        e.dataTransfer.setData("application/x-media-item", JSON.stringify({ type: "game", id: game.id }))
+        draggedGame = game
+        onDragStart?.(e)
+      }}
+      onDragEnd={() => { draggedGame = null }}
+      {...mergeProps}
     >
       {/* Full-bleed cover image */}
       {hasCover ? (
@@ -134,7 +160,60 @@ function GameCard({ game, onClick }: { game: Game; onClick: () => void }) {
           />
         </div>
       )}
+
+      {/* Merge overlay */}
+      {merge.showMerge && (
+        <div className="absolute inset-0 bg-accent/20 flex items-center justify-center pointer-events-none z-30">
+          <span className="bg-accent text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+            폴더 만들기
+          </span>
+        </div>
+      )}
     </div>
+  )
+}
+
+/* ─── Folder Chip (drop target) ─── */
+function FolderChip({
+  folder,
+  isSelected,
+  isOver,
+  onClick,
+  onDoubleClick,
+  onContextMenu,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+}: {
+  folder: { id: number | null; name: string }
+  isSelected: boolean
+  isOver: boolean
+  onClick: () => void
+  onDoubleClick?: () => void
+  onContextMenu?: (e: React.MouseEvent) => void
+  onDragOver?: (e: DragEvent) => void
+  onDragLeave?: (e: DragEvent) => void
+  onDrop?: (e: DragEvent) => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border whitespace-nowrap flex items-center gap-1.5 ${
+        isOver
+          ? "bg-accent text-white border-accent scale-105"
+          : isSelected
+            ? "bg-accent-muted text-accent border-accent/30"
+            : "bg-overlay-2 text-text-secondary border-transparent hover:bg-overlay-4"
+      }`}
+    >
+      <FolderIcon className="size-3" />
+      {folder.name}
+    </button>
   )
 }
 
@@ -190,9 +269,188 @@ export default function LibraryPage() {
   const [apkResults, setApkResults] = useState<Array<{ title: string; package_name: string; path: string; size: number }>>([])
   const [importingApk, setImportingApk] = useState<string | null>(null)
   const [subtitleLoading, setSubtitleLoading] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const dragCounterRef = useRef(0)
+
+  // Folder state
+  const [folders, setFolders] = useState<GameFolder[]>([])
+  const [selectedFolderId, setSelectedFolderId] = useState<number | null>(null)
+  const [newFolderInput, setNewFolderInput] = useState(false)
+  const [newFolderName, setNewFolderName] = useState("")
+  const [editingFolderId, setEditingFolderId] = useState<number | null>(null)
+  const [editingFolderName, setEditingFolderName] = useState("")
+  const [dropTargetFolderId, setDropTargetFolderId] = useState<number | null | "none">("none")
+
+  // Load folders
+  useEffect(() => {
+    api.folders.list().then(setFolders).catch(() => {})
+  }, [])
+
+  const handleCreateFolder = useCallback(async () => {
+    const name = newFolderName.trim()
+    if (!name) { setNewFolderInput(false); return }
+    try {
+      const folder = await api.folders.create({ name })
+      setFolders(prev => [...prev, folder])
+    } catch (e) { console.error("Create folder failed:", e) }
+    setNewFolderName("")
+    setNewFolderInput(false)
+  }, [newFolderName])
+
+  const handleRenameFolder = useCallback(async (id: number) => {
+    const name = editingFolderName.trim()
+    if (!name) { setEditingFolderId(null); return }
+    try {
+      const updated = await api.folders.update(id, { name })
+      setFolders(prev => prev.map(f => f.id === id ? updated : f))
+    } catch (e) { console.error("Rename folder failed:", e) }
+    setEditingFolderId(null)
+  }, [editingFolderName])
+
+  const handleDeleteFolder = useCallback(async (id: number) => {
+    if (!confirm(t("deleteFolderConfirm"))) return
+    try {
+      await api.folders.delete(id)
+      setFolders(prev => prev.filter(f => f.id !== id))
+      if (selectedFolderId === id) setSelectedFolderId(null)
+      refresh()
+    } catch (e) { console.error("Delete folder failed:", e) }
+  }, [selectedFolderId, refresh, t])
+
+  // Folder chip DnD handlers (game → folder, or external file → folder)
+  const handleFolderDragOver = useCallback((folderId: number | null) => (e: DragEvent) => {
+    if (!e.dataTransfer.types.includes("application/x-game-id") &&
+        !e.dataTransfer.types.includes("Files")) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = "move"
+    setDropTargetFolderId(folderId)
+  }, [])
+
+  const handleFolderDragLeave = useCallback((_folderId: number | null) => (e: DragEvent) => {
+    e.stopPropagation()
+    setDropTargetFolderId("none")
+  }, [])
+
+  const handleFolderDrop = useCallback((folderId: number | null) => async (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDropTargetFolderId("none")
+
+    // Internal game drag → move to folder
+    if (e.dataTransfer.types.includes("application/x-game-id")) {
+      const game = draggedGame
+      if (!game || game.folder_id === folderId) return
+      try {
+        await api.games.update(game.id, { folder_id: folderId } as Partial<Game>)
+        refresh()
+      } catch (err) { console.error("Move game to folder failed:", err) }
+      return
+    }
+
+    // External file drop → create game + assign folder
+    const files = e.dataTransfer.files
+    if (!files.length) return
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i] as File & { path?: string }
+      if (!f.path) continue
+      try {
+        const game = await api.games.create({ path: f.path })
+        if (folderId !== null) {
+          await api.games.update(game.id, { folder_id: folderId } as Partial<Game>)
+        }
+      } catch (err) { console.error("Add game to folder failed:", err) }
+    }
+    refresh()
+    api.covers.fetchAll().then(() => refresh()).catch(() => {})
+  }, [refresh])
+
+  // Game → Game merge: create folder and move both
+  const handleGameMergeDrop = useCallback(async (targetGameId: number, draggedGameId: number) => {
+    const name = prompt(t("folderName") || "폴더 이름", t("newFolder") || "새 폴더")
+    if (!name) return
+    try {
+      const folder = await api.folders.create({ name })
+      setFolders(prev => [...prev, folder])
+      await api.games.update(draggedGameId, { folder_id: folder.id } as Partial<Game>)
+      await api.games.update(targetGameId, { folder_id: folder.id } as Partial<Game>)
+      refresh()
+    } catch (err) { console.error("Merge games to folder failed:", err) }
+  }, [refresh, t])
 
   const gamesRef = useRef(games)
   gamesRef.current = games
+
+  // External file Drag & Drop handlers
+  const handleDragEnter = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current++
+    if (e.dataTransfer.types.includes("Files")) {
+      setIsDragOver(true)
+    }
+  }, [])
+
+  const handleDragLeave = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) {
+      setIsDragOver(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDrop = useCallback(async (e: DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(false)
+    dragCounterRef.current = 0
+
+    // Ignore internal game drags — only handle external file drops
+    if (e.dataTransfer.types.includes("application/x-game-id")) return
+
+    const files = e.dataTransfer.files
+    if (!files.length) return
+
+    const paths: string[] = []
+    for (let i = 0; i < files.length; i++) {
+      const f = files[i] as File & { path?: string }
+      if (f.path) paths.push(f.path)
+    }
+    if (!paths.length) return
+
+    // APK files → import directly
+    const apkPaths = paths.filter(p => p.toLowerCase().endsWith(".apk"))
+    const folderPaths = paths.filter(p => !p.toLowerCase().endsWith(".apk"))
+
+    for (const apk of apkPaths) {
+      try {
+        const name = apk.split(/[\\/]/).pop()?.replace(".apk", "") || "Unknown"
+        await api.android.importApk(apk, name)
+      } catch (err) {
+        console.error("APK import failed:", err)
+      }
+    }
+
+    for (const p of folderPaths) {
+      try {
+        await api.games.create({ path: p })
+      } catch (err) {
+        console.error("Add game failed:", err)
+      }
+    }
+
+    if (apkPaths.length || folderPaths.length) {
+      refresh()
+      // Auto-fetch covers
+      api.covers.fetchAll().then(() => refresh()).catch(() => {})
+    }
+  }, [refresh])
 
   // Load media game IDs for filter
   useEffect(() => {
@@ -376,21 +634,39 @@ export default function LibraryPage() {
     }
   }, [apkResults, refresh])
 
-  // Platform filter + categorize games
-  const filteredGames = platformFilter === "all"
+  // Platform filter + folder filter + categorize games
+  const platformFiltered = platformFilter === "all"
     ? games
     : platformFilter === "audio"
       ? games.filter(g => mediaGameIds.audio.has(g.id))
       : platformFilter === "video"
         ? games.filter(g => mediaGameIds.video.has(g.id))
         : games.filter(g => (g.platform || "windows") === platformFilter)
+  const filteredGames = selectedFolderId !== null
+    ? platformFiltered.filter(g => g.folder_id === selectedFolderId)
+    : platformFiltered
   const translatedGames = filteredGames.filter(g => g.translated_count > 0 || g.status === "applied" || g.status === "translated")
   const untranslatedGames = filteredGames.filter(g => g.translated_count === 0 && g.status !== "applied" && g.status !== "translated")
   const hasAndroid = games.some(g => g.platform === "android")
   const hasMedia = mediaGameIds.audio.size > 0 || mediaGameIds.video.size > 0
 
   return (
-    <div className="p-5 md:p-6 max-w-6xl mx-auto">
+    <div
+      className="p-5 md:p-6 max-w-6xl mx-auto relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {/* Drag overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 bg-accent/10 backdrop-blur-sm border-2 border-dashed border-accent rounded-xl flex flex-col items-center justify-center gap-3 pointer-events-none">
+          <UploadIcon className="size-12 text-accent" />
+          <p className="text-lg font-semibold text-accent">{t("dropToAdd")}</p>
+          <p className="text-sm text-text-secondary">{t("dropHint")}</p>
+        </div>
+      )}
+
       {/* Top bar: Search + Actions */}
       <div className="flex items-center gap-3 mb-5">
         <div className="relative flex-1">
@@ -486,6 +762,12 @@ export default function LibraryPage() {
               </div>
               {addError && <p className="text-xs text-error mt-1">{addError}</p>}
             </div>
+            {/* Folder Browser */}
+            <FolderBrowser
+              foldersOnly
+              onSelect={(path) => setAddPath(path)}
+              maxHeight="200px"
+            />
             <div className="pt-3 border-t border-border-subtle">
               <label className="text-[11px] font-medium text-text-tertiary uppercase tracking-wider mb-1.5 block">
                 {t("batchScan")}
@@ -610,6 +892,66 @@ export default function LibraryPage() {
         </div>
       )}
 
+      {/* Folder Bar */}
+      {(folders.length > 0 || games.length > 0) && (
+        <div className="flex items-center gap-1.5 mb-3 overflow-x-auto scrollbar-hide">
+          <FolderIcon className="size-3.5 text-text-tertiary shrink-0" />
+          <FolderChip
+            folder={{ id: null, name: t("allFolder") }}
+            isSelected={selectedFolderId === null}
+            isOver={dropTargetFolderId === null}
+            onClick={() => setSelectedFolderId(null)}
+            onDragOver={handleFolderDragOver(null)}
+            onDragLeave={handleFolderDragLeave(null)}
+            onDrop={handleFolderDrop(null)}
+          />
+          {folders.map(f =>
+            editingFolderId === f.id ? (
+              <input
+                key={f.id}
+                autoFocus
+                value={editingFolderName}
+                onChange={e => setEditingFolderName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleRenameFolder(f.id); if (e.key === "Escape") setEditingFolderId(null) }}
+                onBlur={() => handleRenameFolder(f.id)}
+                className="px-2 py-1 rounded-lg text-xs border border-accent bg-surface text-text-primary focus:outline-none w-24"
+              />
+            ) : (
+              <FolderChip
+                key={f.id}
+                folder={f}
+                isSelected={selectedFolderId === f.id}
+                isOver={dropTargetFolderId === f.id}
+                onClick={() => setSelectedFolderId(f.id)}
+                onDoubleClick={() => { setEditingFolderId(f.id); setEditingFolderName(f.name) }}
+                onContextMenu={e => { e.preventDefault(); handleDeleteFolder(f.id) }}
+                onDragOver={handleFolderDragOver(f.id)}
+                onDragLeave={handleFolderDragLeave(f.id)}
+                onDrop={handleFolderDrop(f.id)}
+              />
+            )
+          )}
+          {newFolderInput ? (
+            <input
+              autoFocus
+              value={newFolderName}
+              onChange={e => setNewFolderName(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleCreateFolder(); if (e.key === "Escape") { setNewFolderInput(false); setNewFolderName("") } }}
+              onBlur={handleCreateFolder}
+              placeholder={t("newFolder")}
+              className="px-2 py-1 rounded-lg text-xs border border-accent bg-surface text-text-primary placeholder:text-text-tertiary focus:outline-none w-24"
+            />
+          ) : (
+            <button
+              onClick={() => setNewFolderInput(true)}
+              className="px-2 py-1.5 rounded-lg text-xs text-text-tertiary hover:text-accent hover:bg-overlay-4 transition-all border border-dashed border-border"
+            >
+              <PlusIcon className="size-3" />
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Platform / Media Filter */}
       {(hasAndroid || hasMedia) && (
         <div className="flex items-center gap-1.5 mb-4">
@@ -667,6 +1009,7 @@ export default function LibraryPage() {
                     key={game.id}
                     game={game}
                     onClick={() => router.push(`/library/${game.id}`)}
+                    onMergeDrop={(draggedId) => handleGameMergeDrop(game.id, draggedId)}
                   />
                 ))}
               </div>
@@ -692,6 +1035,7 @@ export default function LibraryPage() {
                   key={game.id}
                   game={game}
                   onClick={() => router.push(`/library/${game.id}`)}
+                  onMergeDrop={(draggedId) => handleGameMergeDrop(game.id, draggedId)}
                 />
               ))}
             </div>
@@ -702,6 +1046,7 @@ export default function LibraryPage() {
           <FolderOpenIcon className="size-16 text-text-tertiary mb-4" />
           <p className="text-text-secondary font-medium">{t("noGames")}</p>
           <p className="text-sm text-text-tertiary mt-1">{t("noGamesHint")}</p>
+          <p className="text-xs text-text-tertiary mt-1">{t("dropHint")}</p>
           <Button variant="default" size="sm" className="mt-4" onClick={() => setShowAddModal(true)}>
             <PlusIcon className="size-4" /> {t("addGame")}
           </Button>

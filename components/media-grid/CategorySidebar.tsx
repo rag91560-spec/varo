@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 import type { MediaCategory } from "@/lib/types"
 import type { TranslationKey } from "@/lib/i18n"
+import { useDropTarget, type DragPayload } from "@/hooks/use-media-dnd"
 
 /* ─── Category Item ─── */
 function CategoryItem({
@@ -22,6 +23,7 @@ function CategoryItem({
   onEditChange,
   onEditSubmit,
   onEditCancel,
+  onDropItem,
 }: {
   label: string
   count: number
@@ -33,15 +35,24 @@ function CategoryItem({
   onEditChange?: (v: string) => void
   onEditSubmit?: () => void
   onEditCancel?: () => void
+  onDropItem?: (item: DragPayload) => void
 }) {
+  const drop = useDropTarget(onDropItem ?? (() => {}))
+  const dropProps = onDropItem
+    ? { onDragOver: drop.onDragOver, onDragLeave: drop.onDragLeave, onDrop: drop.onDrop }
+    : {}
+
   return (
     <button
       onClick={onClick}
       onContextMenu={onContextMenu}
+      {...dropProps}
       className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs transition-all text-left ${
-        isActive
-          ? "bg-accent/10 text-accent border-l-2 border-accent font-medium"
-          : "text-text-secondary hover:text-text-primary hover:bg-overlay-4 border-l-2 border-transparent"
+        drop.isOver && onDropItem
+          ? "bg-accent/20 text-accent border-l-2 border-accent ring-1 ring-accent/40"
+          : isActive
+            ? "bg-accent/10 text-accent border-l-2 border-accent font-medium"
+            : "text-text-secondary hover:text-text-primary hover:bg-overlay-4 border-l-2 border-transparent"
       }`}
     >
       <FolderIcon className="size-3.5 shrink-0" />
@@ -78,6 +89,7 @@ export function CategorySidebar({
   onCreateCategory,
   onRenameCategory,
   onDeleteCategory,
+  onMoveItem,
   collapsed,
   t,
 }: {
@@ -89,6 +101,7 @@ export function CategorySidebar({
   onCreateCategory: (name: string) => void
   onRenameCategory: (id: number, name: string) => void
   onDeleteCategory: (id: number) => void
+  onMoveItem?: (itemId: number, categoryId: number | null) => void
   collapsed: boolean
   t: (key: TranslationKey) => string
 }) {
@@ -128,6 +141,7 @@ export function CategorySidebar({
           count={uncategorizedCount}
           isActive={activeCategory === 0}
           onClick={() => onSelect(0)}
+          onDropItem={onMoveItem ? (item) => onMoveItem(item.id, null) : undefined}
         />
 
         {categories.map((cat) => (
@@ -137,6 +151,7 @@ export function CategorySidebar({
             count={cat.item_count || 0}
             isActive={activeCategory === cat.id}
             onClick={() => onSelect(cat.id)}
+            onDropItem={onMoveItem ? (item) => onMoveItem(item.id, cat.id) : undefined}
             onContextMenu={(e) => {
               e.preventDefault()
               setContextMenu({ id: cat.id, x: e.clientX, y: e.clientY })

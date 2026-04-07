@@ -22,6 +22,7 @@ import {
   ShieldCheckIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  BrainCircuitIcon,
 } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -30,13 +31,14 @@ import { useLocale, type TranslationKey } from "@/hooks/use-locale"
 import { useGame, useSettings, useTranslationProgress, useLicenseStatus } from "@/hooks/use-api"
 import { api } from "@/lib/api"
 import { getProgressPct, getStatusInfo, appConfirm } from "@/lib/utils"
-import type { QAResult } from "@/lib/types"
+import type { QAResult, Game } from "@/lib/types"
 import { ExportImportButtons } from "@/components/export-import-buttons"
 import { GameHeroBanner } from "@/components/game-detail/GameHeroBanner"
 import { CoverSearchModal } from "@/components/game-detail/CoverSearchModal"
 import { EmulatorPanel } from "@/components/game-detail/EmulatorPanel"
 import { TranslationPanel } from "@/components/game-detail/TranslationPanel"
 import { MediaPanel } from "@/components/game-detail/MediaPanel"
+import { useAIChat } from "@/hooks/use-ai-chat"
 
 const HTML_ENGINES = ["rpg maker mv/mz", "tyranoscript", "gdevelop", "html"]
 
@@ -119,6 +121,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
   const [editing, setEditing] = useState(false)
   const [editTitle, setEditTitle] = useState("")
   const [editExe, setEditExe] = useState("")
+  const [editEngine, setEditEngine] = useState("")
   const [actionError, setActionError] = useState("")
   const [showCoverSearch, setShowCoverSearch] = useState(false)
 
@@ -199,13 +202,18 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
   const handleSaveEdit = useCallback(async () => {
     if (gameId === null) return
     try {
-      await api.games.update(gameId, { title: editTitle, exe_path: editExe })
+      const prevEngine = game?.engine || ""
+      await api.games.update(gameId, { title: editTitle, exe_path: editExe, engine: editEngine || undefined })
       setEditing(false)
+      // Re-scan if engine was changed so resource list reflects the new engine
+      if (editEngine && editEngine !== prevEngine) {
+        await api.games.scan(gameId).catch(() => {})
+      }
       refresh()
     } catch (e) {
       setActionError(e instanceof Error ? e.message : t("unknownError"))
     }
-  }, [gameId, editTitle, editExe, refresh, t])
+  }, [gameId, editTitle, editExe, editEngine, refresh, t])
 
   const openCoverSearch = useCallback(() => {
     setShowCoverSearch(true)
@@ -243,7 +251,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
   const isTranslating = startingTranslation || txStatus === "running" || txStatus === "connecting" || game?.status === "translating"
 
   return (
-    <div className="max-w-4xl mx-auto pb-8">
+    <div className="max-w-4xl mx-auto pb-8 px-4">
       {/* Hero Banner */}
       <GameHeroBanner
         game={game}
@@ -252,8 +260,10 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
         editing={editing}
         editTitle={editTitle}
         editExe={editExe}
+        editEngine={editEngine}
         onEditTitle={setEditTitle}
         onEditExe={setEditExe}
+        onEditEngine={setEditEngine}
         onSaveEdit={handleSaveEdit}
         onCancelEdit={() => setEditing(false)}
         onBack={() => router.push("/library")}
@@ -306,7 +316,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
           </ActionIconButton>
         )}
         <ActionIconButton
-          onClick={() => { setEditTitle(game.title); setEditExe(game.exe_path); setEditing(true) }}
+          onClick={() => { setEditTitle(game.title); setEditExe(game.exe_path); setEditEngine(game.engine || ""); setEditing(true) }}
           title={t("edit")}
         >
           <EditIcon className="size-[18px]" />
@@ -392,6 +402,9 @@ export default function GameDetailPage({ params }: { params: Promise<{ id: strin
 
         {/* QA Panel */}
         {game.string_count > 0 && <QAPanel gameId={game.id} t={t} />}
+
+        {/* AI Agent — prominent when engine unknown */}
+        <AIAgentCard game={game} t={t} />
 
         {/* Tools: String Editor, Flow Graph, Export/Import */}
         {game.string_count > 0 && (
@@ -611,5 +624,32 @@ function QAPanel({ gameId, t }: { gameId: number; t: (key: TranslationKey) => st
         <p className="mt-2 text-xs text-text-tertiary">{t("qaAutoComplete")}</p>
       )}
     </div>
+  )
+}
+
+/* ─── AI Agent Card — opens sidebar ─── */
+function AIAgentCard({ game, t }: { game: Game; t: (key: TranslationKey) => string }) {
+  const { setOpen } = useAIChat()
+  const isUnknown = !game.engine || game.engine === "unknown"
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      className={`w-full text-left rounded-lg p-4 border transition-colors cursor-pointer ${
+        isUnknown
+          ? "bg-purple-500/10 border-purple-500/30 hover:border-purple-400/50"
+          : "bg-overlay-2 border-overlay-6 hover:border-accent/30"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <BrainCircuitIcon className={`size-4 ${isUnknown ? "text-purple-400" : "text-accent"}`} />
+        <span className="text-sm font-medium text-text-primary">{t("aiAgent")}</span>
+        {isUnknown && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 ml-auto">AI</span>
+        )}
+      </div>
+      <p className="text-xs text-text-tertiary mt-1">{t("aiAgentDesc")}</p>
+    </button>
   )
 }

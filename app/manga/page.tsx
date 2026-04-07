@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef, useMemo } from "react"
+import { useState, useCallback, useRef, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import {
   PlusIcon,
@@ -16,45 +16,50 @@ import { useLocale } from "@/hooks/use-locale"
 import { useMangaLibrary } from "@/hooks/use-manga"
 import { MangaCard } from "@/components/manga/MangaCard"
 import { ScrapeModal } from "@/components/manga/ScrapeModal"
-import { SourceSidebar } from "@/components/media-grid/CategorySidebar"
+import { CategorySidebar } from "@/components/media-grid/CategorySidebar"
+import { SelectionBar } from "@/components/media-grid/SelectionBar"
 import { api } from "@/lib/api"
-import { cn } from "@/lib/utils"
+import { cn, appConfirm } from "@/lib/utils"
+import type { MediaCategory } from "@/lib/types"
 
 export default function MangaLibraryPage() {
   const { t } = useLocale()
   const router = useRouter()
   const [search, setSearch] = useState("")
-  const [sourceFilter, setSourceFilter] = useState("")
   const [scrapeOpen, setScrapeOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { items, loading, refresh } = useMangaLibrary(search)
   const [thumbnailTargetId, setThumbnailTargetId] = useState<number | null>(null)
   const thumbnailInputRef = useRef<HTMLInputElement>(null)
 
-  const filtered = sourceFilter
-    ? items.filter((m) => m.source_type === sourceFilter)
-    : items
+  // Category state
+  const [categories, setCategories] = useState<MediaCategory[]>([])
+  const [categoryFilter, setCategoryFilter] = useState<number | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
-  // Compute available sources and counts
-  const { sources, sourceCounts } = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const m of items) {
-      if (m.source_type) {
-        counts[m.source_type] = (counts[m.source_type] || 0) + 1
-      }
-    }
-    return { sources: Object.keys(counts), sourceCounts: counts }
-  }, [items])
+  // Load categories
+  const loadCategories = useCallback(() => {
+    api.categories.list("manga").then(setCategories).catch(() => {})
+  }, [])
+  useEffect(() => { loadCategories() }, [loadCategories])
+
+  // Filter by category
+  const filtered = useMemo(() => {
+    if (categoryFilter === null) return items
+    if (categoryFilter === 0) return items.filter((m) => !m.category_id)
+    return items.filter((m) => m.category_id === categoryFilter)
+  }, [items, categoryFilter])
+
+  const uncategorizedCount = useMemo(() => items.filter((m) => !m.category_id).length, [items])
 
   const handleDelete = useCallback(
     async (id: number) => {
-      if (!confirm(t("mangaConfirmDelete"))) return
+      if (!await appConfirm(t("mangaConfirmDelete"))) return
       try {
         await api.manga.delete(id)
+        setSelectedIds((prev) => { const next = new Set(prev); next.delete(id); return next })
         refresh()
-      } catch {
-        // ignore
-      }
+      } catch {}
     },
     [refresh, t]
   )
@@ -75,15 +80,92 @@ export default function MangaLibraryPage() {
     setThumbnailTargetId(null)
   }
 
+  // Category CRUD
+  const handleCreateCategory = async (name: string) => {
+    try {
+      await api.categories.create({ name, media_type: "manga" })
+      loadCategories()
+    } catch {}
+  }
+
+  const handleRenameCategory = async (id: number, name: string) => {
+    try {
+      await api.categories.update(id, { name })
+      loadCategories()
+    } catch {}
+  }
+
+  const handleDeleteCategory = async (id: number) => {
+    if (!await appConfirm(t("confirmDeleteCategory"))) return
+    try {
+      await api.categories.delete(id)
+      if (categoryFilter === id) setCategoryFilter(null)
+      loadCategories()
+      refresh()
+    } catch {}
+  }
+
+  // Move single item
+  const handleMoveToCategory = async (mangaId: number, categoryId: number | null) => {
+    try {
+      await api.manga.update(mangaId, { category_id: categoryId })
+      refresh()
+      loadCategories()
+    } catch {}
+  }
+
+  // DnD move (sidebar drop)
+  const handleDndMoveToCategory = async (itemId: number, categoryId: number | null) => {
+    await handleMoveToCategory(itemId, categoryId)
+  }
+
+  // Merge: card-to-card drop
+  const handleMergeDrop = async (targetId: number, draggedId: number) => {
+    const name = prompt(t("folderName") || "폴더 이름", t("newFolder") || "새 폴더")
+    if (!name) return
+    try {
+      const cat = await api.categories.create({ name, media_type: "manga" })
+      await api.manga.bulkMove([draggedId, targetId], cat.id)
+      refresh()
+      loadCategories()
+    } catch {}
+  }
+
+  // Selection
+  const handleSelect = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  // Bulk move
+  const handleBulkMove = async (categoryId: number | null) => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    try {
+      await api.manga.bulkMove(ids, categoryId)
+      setSelectedIds(new Set())
+      refresh()
+      loadCategories()
+    } catch {}
+  }
+
   return (
     <div className="flex-1 flex min-h-0">
-      {/* Source Sidebar */}
-      <SourceSidebar
-        sources={sources}
-        activeSource={sourceFilter}
-        onSelect={setSourceFilter}
-        counts={sourceCounts}
+      {/* Category Sidebar */}
+      <CategorySidebar
+        categories={categories}
+        activeCategory={categoryFilter}
+        onSelect={setCategoryFilter}
         totalCount={items.length}
+        uncategorizedCount={uncategorizedCount}
+        onCreateCategory={handleCreateCategory}
+        onRenameCategory={handleRenameCategory}
+        onDeleteCategory={handleDeleteCategory}
+        onMoveItem={handleDndMoveToCategory}
         collapsed={sidebarCollapsed}
         t={t}
       />
@@ -143,6 +225,18 @@ export default function MangaLibraryPage() {
           </div>
         </div>
 
+        {/* Selection bar */}
+        {selectedIds.size > 0 && (
+          <div className="px-6">
+            <SelectionBar
+              selectedCount={selectedIds.size}
+              categories={categories}
+              onBulkMove={handleBulkMove}
+              onDeselectAll={() => setSelectedIds(new Set())}
+            />
+          </div>
+        )}
+
         {/* Grid */}
         <div className="flex-1 overflow-y-auto px-6 pb-6">
           {loading ? (
@@ -163,7 +257,10 @@ export default function MangaLibraryPage() {
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            <div
+              className="grid gap-3"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))" }}
+            >
               {filtered.map((manga) => (
                 <MangaCard
                   key={manga.id}
@@ -171,6 +268,12 @@ export default function MangaLibraryPage() {
                   onClick={() => router.push(`/manga/${manga.id}`)}
                   onDelete={handleDelete}
                   onChangeThumbnail={handleChangeThumbnail}
+                  selectable
+                  selected={selectedIds.has(manga.id)}
+                  onSelect={(checked) => handleSelect(manga.id, checked)}
+                  categories={categories}
+                  onMoveToCategory={(catId) => handleMoveToCategory(manga.id, catId)}
+                  onMergeDrop={(draggedId) => handleMergeDrop(manga.id, draggedId)}
                 />
               ))}
             </div>

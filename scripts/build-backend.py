@@ -11,6 +11,14 @@ DIST_DIR = ROOT / "dist" / "backend-dist"
 
 
 def main():
+    # Ensure all dependencies are installed
+    req_file = ROOT / "backend" / "requirements.txt"
+    if req_file.exists():
+        print("[build-backend] Installing backend requirements...")
+        subprocess.check_call([
+            sys.executable, "-m", "pip", "install", "-r", str(req_file),
+        ])
+
     # Ensure PyInstaller is installed
     try:
         import PyInstaller  # noqa: F401

@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 import { FilmIcon, MusicIcon, Trash2Icon, ClockIcon, FolderIcon, CheckIcon, ImagePlusIcon } from "lucide-react"
 import { useLocale } from "@/hooks/use-locale"
 import type { MediaCategory } from "@/lib/types"
+import { useDragItem, useMergeTarget } from "@/hooks/use-media-dnd"
 
 function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return ""
@@ -20,6 +21,7 @@ function formatSize(bytes: number): string {
 }
 
 interface MediaCardProps {
+  id?: number
   title: string
   thumbnail?: string
   mediaType: "video" | "audio"
@@ -35,9 +37,11 @@ interface MediaCardProps {
   onDelete?: () => void
   onChangeThumbnail?: () => void
   onMoveToCategory?: (categoryId: number | null) => void
+  onMergeDrop?: (draggedId: number) => void
 }
 
 export function MediaCard({
+  id,
   title,
   thumbnail,
   mediaType,
@@ -53,6 +57,7 @@ export function MediaCard({
   onDelete,
   onChangeThumbnail,
   onMoveToCategory,
+  onMergeDrop,
 }: MediaCardProps) {
   const { t } = useLocale()
   const isVideo = mediaType === "video"
@@ -60,6 +65,22 @@ export function MediaCard({
   const [showMenu, setShowMenu] = useState(false)
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 })
   const menuRef = useRef<HTMLDivElement>(null)
+
+  // DnD: drag source
+  const drag = useDragItem(mediaType, id ?? 0)
+  const dragProps = id
+    ? { draggable: drag.draggable, onDragStart: drag.onDragStart, onDragEnd: drag.onDragEnd }
+    : {}
+
+  // DnD: merge target
+  const mergeHandler = useCallback(
+    (draggedId: number) => { if (draggedId !== id) onMergeDrop?.(draggedId) },
+    [id, onMergeDrop],
+  )
+  const merge = useMergeTarget(mergeHandler)
+  const mergeProps = onMergeDrop && id
+    ? { onDragOver: merge.onDragOver, onDragLeave: merge.onDragLeave, onDrop: merge.onDrop }
+    : {}
 
   const currentCatName = categories?.find((c) => c.id === categoryId)?.name
 
@@ -94,15 +115,19 @@ export function MediaCard({
         className={cn(
           "group relative rounded-xl overflow-hidden cursor-pointer",
           "bg-surface border",
-          selected
-            ? "border-accent shadow-md shadow-accent/20 ring-1 ring-accent/30"
-            : isActive
-              ? "border-accent shadow-md shadow-accent/10"
-              : "border-border-subtle hover:border-accent/40 hover:shadow-lg hover:shadow-accent/5",
+          merge.showMerge
+            ? "border-accent ring-2 ring-accent/50 animate-pulse"
+            : selected
+              ? "border-accent shadow-md shadow-accent/20 ring-1 ring-accent/30"
+              : isActive
+                ? "border-accent shadow-md shadow-accent/10"
+                : "border-border-subtle hover:border-accent/40 hover:shadow-lg hover:shadow-accent/5",
           "transition-all duration-200"
         )}
         onClick={onClick}
         onContextMenu={handleContextMenu}
+        {...dragProps}
+        {...mergeProps}
       >
         {/* Thumbnail */}
         <div className={cn(
@@ -165,19 +190,17 @@ export function MediaCard({
             </button>
           )}
 
-          {/* Change thumbnail button — center overlay on hover */}
+          {/* Change thumbnail button */}
           {onChangeThumbnail && !selected && (
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 onChangeThumbnail()
               }}
-              className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all z-10"
+              className="absolute bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 bg-black/60 hover:bg-accent/80 text-white p-2 rounded-full transition-all z-10"
               title={t("changeThumbnail")}
             >
-              <div className="bg-black/60 hover:bg-accent/80 text-white p-2.5 rounded-full transition-colors">
-                <ImagePlusIcon className="size-5" />
-              </div>
+              <ImagePlusIcon className="size-4" />
             </button>
           )}
 
@@ -191,6 +214,15 @@ export function MediaCard({
           {/* Selected overlay */}
           {selected && (
             <div className="absolute inset-0 bg-accent/10 pointer-events-none" />
+          )}
+
+          {/* Merge overlay */}
+          {merge.showMerge && (
+            <div className="absolute inset-0 bg-accent/20 flex items-center justify-center pointer-events-none z-20">
+              <span className="bg-accent text-white text-xs font-bold px-3 py-1.5 rounded-lg">
+                {t("createGroup") || "그룹 만들기"}
+              </span>
+            </div>
           )}
         </div>
 

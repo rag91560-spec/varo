@@ -91,13 +91,12 @@ function useSdkAutoSetup() {
 
     async function check() {
       try {
-        const status = await api.android.sdkStatus()
-        if (cancelled || status.installed) return
+        // Only subscribe to progress if setup is already actively running.
+        // Do NOT auto-trigger setup — users must start it explicitly from Settings.
+        // (Auto-triggering caused confusing "license acceptance failed" errors for all users.)
+        const active = await api.android.activeSetup()
+        if (cancelled || !active) return
 
-        // Trigger auto-setup (fire-and-forget, safe to call multiple times)
-        await api.android.autoSetup()
-
-        // Connect SSE for progress
         eventSource = new EventSource(api.android.setupStatusUrl())
         eventSource.addEventListener("status", (e) => {
           if (cancelled) return
@@ -107,7 +106,6 @@ function useSdkAutoSetup() {
             if (data.status === "completed" || data.status === "failed" || data.status === "cancelled") {
               eventSource?.close()
               eventSource = null
-              // Clear progress after a short delay on completion
               if (data.status === "completed") {
                 setTimeout(() => { if (!cancelled) setProgress(null) }, 3000)
               }

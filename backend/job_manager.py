@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import os
 import threading
 import uuid
 from typing import Optional
@@ -151,7 +152,7 @@ async def start_translation(game_id: int, provider: str, api_key: str,
             api_keys = json.loads(api_keys)
         api_key = api_keys.get(provider, "")
 
-    # Extract strings first
+    # Extract strings — try engine bridge first, fall back to agent-saved strings
     try:
         result = engine_bridge.extract_strings(
             game["path"], game["engine"], source_lang, aes_key=game.get("aes_key", "")
@@ -161,14 +162,52 @@ async def start_translation(game_id: int, provider: str, api_key: str,
         job.resources = result.get("entries", [])
         if job.total_strings == 0:
             raise ValueError("No translatable strings found")
-    except Exception as e:
-        job.status = "error"
-        job.error_message = str(e)
-        await db.create_job(job_id, game_id, 0)
-        await db.update_job(job_id, status="error", error_message=str(e))
-        await db.update_game(game_id, status="idle")
-        job.broadcast("error", {"message": str(e)})
-        return job
+    except Exception as extract_err:
+        # Fallback: check for agent-saved strings in project_json
+        saved_project = await db.get_project(game_id)
+        if saved_project and saved_project.get("project_json"):
+            try:
+                saved_entries = json.loads(saved_project["project_json"])
+                if isinstance(saved_entries, list) and len(saved_entries) > 0:
+                    import ue_translator
+                    project = ue_translator.TranslationProject()
+                    project.game_path = game.get("path", "")
+                    project.engine_name = game.get("engine", "agent")
+                    project.entries = []
+                    for entry in saved_entries:
+                        if not isinstance(entry, dict):
+                            continue
+                        project.entries.append({
+                            "namespace": entry.get("namespace", ""),
+                            "key": entry.get("key", entry.get("file", "")),
+                            "original": entry.get("original", ""),
+                            "translated": entry.get("translated", ""),
+                            "status": entry.get("status", "pending"),
+                            "tag": entry.get("tag", ""),
+                            "safety": entry.get("safety", "safe"),
+                        })
+                    if project.entries:
+                        job.project = project
+                        job.total_strings = len(project.entries)
+                        job.resources = []
+                        logger.info(
+                            "Using %d agent-saved strings for game %s (engine extract failed: %s)",
+                            job.total_strings, game_id, extract_err,
+                        )
+                    else:
+                        raise extract_err
+                else:
+                    raise extract_err
+            except (json.JSONDecodeError, TypeError, ImportError):
+                raise extract_err
+        else:
+            job.status = "error"
+            job.error_message = str(extract_err)
+            await db.create_job(job_id, game_id, 0)
+            await db.update_job(job_id, status="error", error_message=str(extract_err))
+            await db.update_game(game_id, status="idle")
+            job.broadcast("error", {"message": str(extract_err)})
+            return job
 
     # Apply range filter if specified
     job.start_index = start_index
@@ -453,6 +492,8 @@ def _run_translation(job: TranslationJob, game: dict, provider: str,
         job.error_message = str(e)
         job.broadcast("error", {"message": str(e)})
         _finalize_job(job, game, status="error", error=str(e))
+        # Write detailed context to crash.log for debugging
+        _write_translation_crash(job, game, provider, model, e)
 
 
 def _save_to_tm(job: TranslationJob, game: dict,
@@ -515,6 +556,27 @@ def _persist_progress(job: TranslationJob):
             asyncio.run_coroutine_threadsafe(_update(), loop)
     except Exception:
         pass  # 실패해도 번역은 계속
+
+
+def _write_translation_crash(job: TranslationJob, game: dict,
+                             provider: str, model: str, exc: Exception):
+    """Write detailed translation crash context to crash.log."""
+    import traceback as _tb
+    data_dir = os.environ.get("GT_DATA_DIR") or os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "data")
+    crash_log = os.path.join(data_dir, "crash.log")
+    try:
+        with open(crash_log, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"[{datetime.now(timezone.utc).isoformat()}] TRANSLATION CRASH\n")
+            f.write(f"Game: {game.get('title', '?')} (id={game.get('id')})\n")
+            f.write(f"Engine: {game.get('engine', '?')}\n")
+            f.write(f"Provider: {provider} / Model: {model}\n")
+            f.write(f"Progress: {job.progress:.1f}% ({job.translated_strings}/{job.total_strings})\n")
+            f.write(f"Job: {job.job_id}\n")
+            f.write("".join(_tb.format_exception(type(exc), exc, exc.__traceback__)))
+    except Exception:
+        pass
 
 
 def _finalize_job(job: TranslationJob, game: dict,

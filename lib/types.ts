@@ -397,6 +397,9 @@ export interface MangaTranslationEntry {
   width: number
   height: number
   direction: "horizontal" | "vertical"
+  polygon?: number[][]
+  text_color?: string
+  bg_type?: string
 }
 
 export interface MangaTranslationResult {
@@ -436,6 +439,8 @@ export interface SubtitleSegment {
   translated_text: string
   confidence: number
   edited: number
+  pos_x?: number | null
+  pos_y?: number | null
 }
 
 export interface SubtitleJobStatus {
@@ -456,6 +461,16 @@ export interface SubtitleExportOptions {
   margin_v?: number
 }
 
+export interface SubtitleGlossaryEntry {
+  id: number
+  subtitle_id: number
+  source: string
+  target: string
+  category: "character" | "place" | "term" | "general"
+  auto_generated: number
+  created_at: string
+}
+
 export interface SubtitleStyleOptions {
   font_name: string
   font_size: number
@@ -464,6 +479,59 @@ export interface SubtitleStyleOptions {
   outline_width: number       // 0-8, 0 = no outline
   alignment: number           // numpad: 2=bottom, 8=top, 5=center
   margin_v: number
+}
+
+// --- Video Download ---
+
+export interface VideoDownloadJob {
+  job_id: string
+  status: "running" | "completed" | "error" | "cancelled"
+  progress: number
+  message?: string
+  video_id?: number
+  title?: string
+  duration?: number
+  filesize?: number
+  error_message?: string
+}
+
+// --- Subtitle Sync ---
+
+export interface SyncResult {
+  offset_ms: number
+  stretch_factor: number
+  confidence: number
+  segments_updated: number
+}
+
+// --- Manga Rendering ---
+
+export type InpaintMode = "solid" | "telea" | "ns" | "lama"
+
+export type DetectorType = "gemini" | "local"
+
+export interface RenderConfig {
+  inpaint_mode: InpaintMode
+  font_id: string
+  auto_color: boolean
+  outline_enabled: boolean
+  outline_width: number
+  direction: "auto" | "horizontal" | "vertical"
+}
+
+export interface FontInfo {
+  id: string
+  name: string
+  type: "sans" | "serif" | "comic"
+  installed: boolean
+  file?: string
+}
+
+export interface MangaRenderStatus {
+  manga_id: number
+  total_pages: number
+  rendered_pages: number
+  pages: Record<number, { rendered: boolean; inpaint_mode?: string; font_id?: string }>
 }
 
 // --- Export/Import ---

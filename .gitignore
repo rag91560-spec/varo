@@ -9,6 +9,12 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/audio/
+data/*.log
+data/hardsub/
+data/manga_rendered/
+data/subtitle_audio/
+data/thumbnails/
+test_rendered_check.png
 .env
 .env.local
 *.exe

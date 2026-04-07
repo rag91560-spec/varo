@@ -1,3 +1,5 @@
+export { AgentLogEntry } from "./AgentLogEntry"
+export { AgentPanel } from "./AgentPanel"
 export { ChipButton } from "./ChipButton"
 export { CoverSearchModal } from "./CoverSearchModal"
 export { EmulatorPanel } from "./EmulatorPanel"

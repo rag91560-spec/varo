@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { api } from "@/lib/api"
-import type { MangaItem, MangaTranslationResult } from "@/lib/types"
+import type { MangaItem, MangaTranslationResult, DetectorType } from "@/lib/types"
 
 export function useMangaLibrary(search?: string) {
   const [items, setItems] = useState<MangaItem[]>([])
@@ -82,12 +82,12 @@ export function useMangaTranslation(mangaId: number | null, page: number) {
     load()
   }, [load])
 
-  const translate = useCallback(async (model?: string) => {
+  const translate = useCallback(async (model?: string, detector?: DetectorType) => {
     if (mangaId === null) return
     setLoading(true)
     setError("")
     try {
-      const result = await api.manga.translate(mangaId, page, model)
+      const result = await api.manga.translate(mangaId, page, model, detector)
       setTranslation(result.translation)
       return result
     } catch (e: unknown) {

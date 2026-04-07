@@ -1,6 +1,6 @@
 {
   "name": "game-translator",
-  "version": "1.3.0",
+  "version": "1.3.8",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -44,7 +44,7 @@
   },
   "build": {
     "appId": "com.gametranslator.app",
-    "productName": "번@역+기!",
+    "productName": "게임번역기",
     "asar": true,
     "afterPack": "./scripts/afterPack.js",
     "directories": {
@@ -58,11 +58,21 @@
       {
         "from": "build-staging/frontend",
         "to": "frontend",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       },
       {
         "from": "dist/backend-dist",
         "to": "backend-dist"
+      },
+      {
+        "from": "../../ue-translator",
+        "to": "ue-translator",
+        "filter": [
+          "ue_translator.py",
+          "tools/**/*"
+        ]
       },
       {
         "from": "data",
@@ -83,7 +93,9 @@
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico"
+      "uninstallerIcon": "build/icon.ico",
+      "include": "build/installer.nsh",
+      "warningsAsErrors": false
     },
     "publish": {
       "provider": "generic",

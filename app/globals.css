@@ -130,3 +130,12 @@ input[type="radio"]:focus-visible {
   outline-offset: 2px;
   border-radius: 2px;
 }
+
+/* ── Video player center feedback ── */
+@keyframes ping-once {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.animate-ping-once {
+  animation: ping-once 0.5s ease-out forwards;
+}

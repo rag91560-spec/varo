@@ -5,7 +5,6 @@ import {
   Loader2Icon,
   FilmIcon,
   PlusIcon,
-  XIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
 } from "lucide-react"
@@ -21,6 +20,7 @@ import { SelectionBar } from "@/components/media-grid/SelectionBar"
 import { AddMediaModal } from "@/components/media-grid/AddMediaModal"
 import { CategorySidebar } from "@/components/media-grid/CategorySidebar"
 import { StandaloneVideoPlayer } from "@/components/videos/StandaloneVideoPlayer"
+import { SubtitleWorkspace } from "@/components/subtitle/SubtitleWorkspace"
 
 export default function VideosPage() {
   const { t } = useLocale()
@@ -34,6 +34,7 @@ export default function VideosPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [thumbnailTargetId, setThumbnailTargetId] = useState<number | null>(null)
+  const [subtitleVideo, setSubtitleVideo] = useState<VideoItem | null>(null)
   const thumbnailInputRef = useRef<HTMLInputElement>(null)
 
   const loadData = useCallback(async () => {
@@ -111,6 +112,24 @@ export default function VideosPage() {
     } catch {}
   }
 
+  const handleDndMoveToCategory = async (itemId: number, categoryId: number | null) => {
+    await handleMoveToCategory(itemId, categoryId)
+    handleCategoriesRefresh()
+  }
+
+  const handleMergeDrop = async (targetId: number, draggedId: number) => {
+    const name = prompt(t("folderName") || "폴더 이름", t("newFolder") || "새 폴더")
+    if (!name) return
+    try {
+      const cat = await api.categories.create({ name, media_type: "video" })
+      await api.videos.bulkMove([draggedId, targetId], cat.id)
+      setVideos((prev) => prev.map((v) =>
+        [draggedId, targetId].includes(v.id) ? { ...v, category_id: cat.id } : v
+      ))
+      handleCategoriesRefresh()
+    } catch {}
+  }
+
   const handleCategoriesRefresh = () => {
     api.categories.list("video").then(setCategories).catch(() => {})
   }
@@ -174,6 +193,7 @@ export default function VideosPage() {
         onCreateCategory={handleCreateCategory}
         onRenameCategory={handleRenameCategory}
         onDeleteCategory={handleDeleteCategory}
+        onMoveItem={handleDndMoveToCategory}
         collapsed={sidebarCollapsed}
         t={t}
       />
@@ -227,6 +247,7 @@ export default function VideosPage() {
               {filtered.map((video) => (
                 <MediaCard
                   key={video.id}
+                  id={video.id}
                   title={video.title}
                   thumbnail={video.thumbnail || undefined}
                   mediaType="video"
@@ -242,6 +263,7 @@ export default function VideosPage() {
                   onDelete={() => handleDelete(video.id)}
                   onChangeThumbnail={() => handleChangeThumbnail(video.id)}
                   onMoveToCategory={(catId) => handleMoveToCategory(video.id, catId)}
+                  onMergeDrop={(draggedId) => handleMergeDrop(video.id, draggedId)}
                 />
               ))}
             </MediaGrid>
@@ -265,16 +287,14 @@ export default function VideosPage() {
           onClick={() => setPlayingVideo(null)}
         >
           <div
-            className="relative w-full max-w-4xl max-h-[85vh] mx-4"
+            className="w-[90vw] max-w-6xl h-[85vh] mx-4"
             onClick={(e) => e.stopPropagation()}
           >
-            <button
-              onClick={() => setPlayingVideo(null)}
-              className="absolute -top-10 right-0 text-white/70 hover:text-white transition-colors"
-            >
-              <XIcon className="size-6" />
-            </button>
-            <StandaloneVideoPlayer video={playingVideo} />
+            <StandaloneVideoPlayer
+              video={playingVideo}
+              onClose={() => setPlayingVideo(null)}
+              onOpenSubtitles={() => { setSubtitleVideo(playingVideo); setPlayingVideo(null) }}
+            />
           </div>
         </div>
       )}
@@ -285,6 +305,17 @@ export default function VideosPage() {
           mediaType="video"
           onClose={() => setShowAddModal(false)}
           onAdded={handleAdded}
+        />
+      )}
+
+      {/* Subtitle workspace */}
+      {subtitleVideo && (
+        <SubtitleWorkspace
+          mediaId={subtitleVideo.id}
+          mediaType="video"
+          mediaSource={api.videos.serveUrl(subtitleVideo.id)}
+          mediaTitle={subtitleVideo.title}
+          onClose={() => setSubtitleVideo(null)}
         />
       )}
     </div>

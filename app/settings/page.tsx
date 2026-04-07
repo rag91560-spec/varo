@@ -17,6 +17,11 @@ import {
   ZapIcon,
   XCircleIcon,
   KeyboardIcon,
+  FileWarningIcon,
+  CopyIcon,
+  Trash2Icon,
+  DownloadIcon,
+  RefreshCwIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -51,6 +56,28 @@ export default function SettingsPage() {
   const [killHotkey, setKillHotkey] = useState("Ctrl+Shift+Q")
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false)
   const [hotkeyStatus, setHotkeyStatus] = useState<"idle" | "success" | "error">("idle")
+  const [crashLog, setCrashLog] = useState<string | null>(null)
+  const [crashLogLoading, setCrashLogLoading] = useState(false)
+  const [crashLogCopied, setCrashLogCopied] = useState(false)
+
+  // Update state
+  const [appVersion, setAppVersion] = useState("")
+  const [updateStatus, setUpdateStatus] = useState<"idle" | "checking" | "available" | "downloading" | "downloaded" | "latest" | "error">("idle")
+  const [updateProgress, setUpdateProgress] = useState(0)
+  const [updateError, setUpdateError] = useState("")
+  const [isElectron, setIsElectron] = useState(false)
+
+  useEffect(() => {
+    const electron = typeof window !== "undefined" && !!window.electronAPI
+    setIsElectron(electron)
+    if (electron && window.electronAPI) {
+      window.electronAPI.getAppVersion().then((v: string) => setAppVersion(v))
+      const offAvailable = window.electronAPI.onUpdateAvailable(() => setUpdateStatus("downloading"))
+      const offProgress = window.electronAPI.onUpdateProgress((data: { percent: number }) => setUpdateProgress(Math.round(data.percent)))
+      const offDownloaded = window.electronAPI.onUpdateDownloaded(() => setUpdateStatus("downloaded"))
+      return () => { offAvailable(); offProgress(); offDownloaded() }
+    }
+  }, [])
 
 
   // Load settings into local state
@@ -492,6 +519,176 @@ export default function SettingsPage() {
           >
             {t("addPath")}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Launcher Update */}
+      {isElectron && (
+        <Card className="bg-surface">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DownloadIcon className="size-5 text-accent" />
+              런처 업데이트
+            </CardTitle>
+            <CardDescription>
+              현재 버전: <span className="font-mono text-text-primary">v{appVersion}</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {updateStatus === "idle" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  setUpdateStatus("checking")
+                  setUpdateError("")
+                  try {
+                    const result = await window.electronAPI!.checkForUpdates() as { updateInfo?: { version?: string } } | null
+                    if (!result?.updateInfo?.version || result.updateInfo.version === appVersion) {
+                      setUpdateStatus("latest")
+                    }
+                    // If update is available, the onUpdateAvailable listener will fire
+                  } catch (e: unknown) {
+                    setUpdateStatus("error")
+                    setUpdateError(e instanceof Error ? e.message : "업데이트 확인 실패")
+                  }
+                }}
+              >
+                <RefreshCwIcon className="size-4" />
+                업데이트 확인
+              </Button>
+            )}
+
+            {updateStatus === "checking" && (
+              <div className="flex items-center gap-2 text-sm text-text-secondary">
+                <Loader2Icon className="size-4 animate-spin text-accent" />
+                업데이트 확인 중...
+              </div>
+            )}
+
+            {updateStatus === "latest" && (
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-sm text-success">
+                  <CheckIcon className="size-4" />
+                  최신 버전입니다
+                </span>
+                <Button variant="ghost" size="sm" onClick={() => setUpdateStatus("idle")}>
+                  다시 확인
+                </Button>
+              </div>
+            )}
+
+            {updateStatus === "downloading" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-text-secondary">
+                  <Loader2Icon className="size-4 animate-spin text-accent" />
+                  다운로드 중... {updateProgress > 0 && `${updateProgress}%`}
+                </div>
+                {updateProgress > 0 && (
+                  <div className="h-1.5 bg-overlay-4 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-accent rounded-full transition-all duration-300"
+                      style={{ width: `${updateProgress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {updateStatus === "downloaded" && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-success">업데이트 다운로드 완료!</span>
+                <Button
+                  size="sm"
+                  onClick={() => window.electronAPI?.installUpdate()}
+                >
+                  지금 설치 (재시작)
+                </Button>
+              </div>
+            )}
+
+            {updateStatus === "error" && (
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-error">{updateError || "업데이트 확인 실패"}</span>
+                <Button variant="ghost" size="sm" onClick={() => setUpdateStatus("idle")}>
+                  다시 시도
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Crash Log */}
+      <Card className="bg-surface">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileWarningIcon className="size-5 text-accent" />
+            {t("crashLog")}
+          </CardTitle>
+          <CardDescription>
+            {t("crashLogDescription")}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {crashLog === null ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={crashLogLoading}
+              onClick={async () => {
+                setCrashLogLoading(true)
+                try {
+                  const log = await api.settings.crashLog()
+                  setCrashLog(log || "")
+                } finally {
+                  setCrashLogLoading(false)
+                }
+              }}
+            >
+              {t("crashLog")}
+            </Button>
+          ) : crashLog === "" ? (
+            <p className="text-sm text-text-tertiary">{t("crashLogEmpty")}</p>
+          ) : (
+            <>
+              <pre
+                className="max-h-96 overflow-auto rounded-lg bg-surface-elevated border border-border p-3 text-xs text-text-secondary font-mono whitespace-pre-wrap break-all"
+                ref={(el) => { if (el) el.scrollTop = el.scrollHeight }}
+              >
+                {crashLog}
+              </pre>
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(crashLog)
+                    setCrashLogCopied(true)
+                    setTimeout(() => setCrashLogCopied(false), 2000)
+                  }}
+                >
+                  {crashLogCopied ? (
+                    <><CheckIcon className="size-3.5" /> {t("crashLogCopied")}</>
+                  ) : (
+                    <><CopyIcon className="size-3.5" /> {t("crashLogCopy")}</>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    if (!confirm(t("crashLogConfirmClear"))) return
+                    await api.settings.clearCrashLog()
+                    setCrashLog("")
+                  }}
+                >
+                  <Trash2Icon className="size-3.5" />
+                  {t("crashLogClear")}
+                </Button>
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
 

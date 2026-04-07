@@ -7,6 +7,8 @@ from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 block_cipher = None
 
 backend_submodules = collect_submodules("backend")
+openai_submodules = collect_submodules("openai")
+anthropic_submodules = collect_submodules("anthropic")
 
 # Collect rapidocr ONNX models + config
 rapidocr_datas = collect_data_files("rapidocr_onnxruntime", include_py_files=False)
@@ -50,6 +52,9 @@ a = Analysis(
         "rapidocr_onnxruntime",
         "onnxruntime",
         "cv2",
+        # AI providers (loaded at runtime by ue_translator.py)
+        *openai_submodules,
+        *anthropic_submodules,
         # pydantic
         "pydantic",
         # email-validator (optional for pydantic)

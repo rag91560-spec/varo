@@ -25,6 +25,7 @@ import { AddMediaModal } from "@/components/media-grid/AddMediaModal"
 import { AudioPlayerBar } from "@/components/media-grid/AudioPlayerBar"
 import { AudioFullscreenPlayer } from "@/components/media-grid/AudioFullscreenPlayer"
 import { CategorySidebar } from "@/components/media-grid/CategorySidebar"
+import { SubtitleWorkspace } from "@/components/subtitle/SubtitleWorkspace"
 
 type Tab = "my" | "game"
 
@@ -47,6 +48,7 @@ export default function AudioPage() {
   const [activeTrack, setActiveTrack] = useState<AudioItem | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [fullscreenTrack, setFullscreenTrack] = useState<AudioItem | null>(null)
+  const [subtitleAudio, setSubtitleAudio] = useState<AudioItem | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [thumbnailTargetId, setThumbnailTargetId] = useState<number | null>(null)
   const thumbnailInputRef = useRef<HTMLInputElement>(null)
@@ -173,6 +175,24 @@ export default function AudioPage() {
     } catch {}
   }
 
+  const handleDndMoveToCategory = async (itemId: number, categoryId: number | null) => {
+    await handleMoveToCategory(itemId, categoryId)
+    handleCategoriesRefresh()
+  }
+
+  const handleMergeDrop = async (targetId: number, draggedId: number) => {
+    const name = prompt(t("folderName") || "폴더 이름", t("newFolder") || "새 폴더")
+    if (!name) return
+    try {
+      const cat = await api.categories.create({ name, media_type: "audio" })
+      await api.audio.bulkMove([draggedId, targetId], cat.id)
+      setAudioItems((prev) => prev.map((a) =>
+        [draggedId, targetId].includes(a.id) ? { ...a, category_id: cat.id } : a
+      ))
+      handleCategoriesRefresh()
+    } catch {}
+  }
+
   const handleCategoriesRefresh = () => {
     api.categories.list("audio").then(setCategories).catch(() => {})
   }
@@ -296,6 +316,7 @@ export default function AudioPage() {
             onCreateCategory={handleCreateCategory}
             onRenameCategory={handleRenameCategory}
             onDeleteCategory={handleDeleteCategory}
+            onMoveItem={handleDndMoveToCategory}
             collapsed={sidebarCollapsed}
             t={t}
           />
@@ -317,6 +338,15 @@ export default function AudioPage() {
                 onAdd={() => setShowAddModal(true)}
                 mediaType="audio"
               />
+              {activeTrack && activeTrack.type === "local" && (
+                <button
+                  onClick={() => setSubtitleAudio(activeTrack)}
+                  className="ml-2 px-3 py-1.5 text-xs border rounded-md hover:bg-accent transition-colors shrink-0"
+                  title={t("subtitlePipeline")}
+                >
+                  {t("subtitlePipeline")}
+                </button>
+              )}
             </div>
 
             {/* Selection bar */}
@@ -348,6 +378,7 @@ export default function AudioPage() {
                   {filtered.map((item) => (
                     <MediaCard
                       key={item.id}
+                      id={item.id}
                       title={item.title}
                       thumbnail={item.thumbnail || undefined}
                       mediaType="audio"
@@ -363,6 +394,7 @@ export default function AudioPage() {
                       onDelete={() => handleDelete(item.id)}
                       onChangeThumbnail={() => handleChangeThumbnail(item.id)}
                       onMoveToCategory={(catId) => handleMoveToCategory(item.id, catId)}
+                      onMergeDrop={(draggedId) => handleMergeDrop(item.id, draggedId)}
                     />
                   ))}
                 </MediaGrid>
@@ -507,6 +539,17 @@ export default function AudioPage() {
             setFullscreenTrack(updated)
             if (activeTrack?.id === updated.id) setActiveTrack(updated)
           }}
+        />
+      )}
+
+      {/* Subtitle workspace for audio */}
+      {subtitleAudio && (
+        <SubtitleWorkspace
+          mediaId={subtitleAudio.id}
+          mediaType="audio"
+          mediaSource={api.audio.serveUrl(subtitleAudio.id)}
+          mediaTitle={subtitleAudio.title}
+          onClose={() => setSubtitleAudio(null)}
         />
       )}
     </div>
