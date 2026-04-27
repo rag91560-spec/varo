@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1600px;
+    height: 400px;
+    overflow: hidden;
+    font-family: 'Segoe UI', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  }
+
+  .canvas {
+    width: 1600px;
+    height: 400px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 20% 50%, #1e0a4a 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 30%, #0a1a4a 0%, transparent 50%),
+      radial-gradient(ellipse at 55% 100%, #0a0a20 0%, transparent 40%),
+      linear-gradient(135deg, #0c0c1e 0%, #10102e 50%, #080818 100%);
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(100, 70, 255, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100, 70, 255, 0.04) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* 왼쪽 장식 빛줄기 */
+  .light-beam {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 600px;
+    height: 600px;
+    background: radial-gradient(ellipse at 0% 50%, rgba(120, 70, 255, 0.18) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  /* 오른쪽 장식 빛줄기 */
+  .light-beam-r {
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(ellipse at 100% 0%, rgba(40, 120, 255, 0.12) 0%, transparent 65%);
+    pointer-events: none;
+  }
+
+  /* 수평선 장식 */
+  .h-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(120, 80, 255, 0.3) 20%, rgba(80, 140, 255, 0.3) 80%, transparent);
+  }
+  .h-line-top { top: 60px; }
+  .h-line-bot { bottom: 60px; }
+
+  /* 왼쪽 아이콘 영역 */
+  .left {
+    position: relative;
+    z-index: 10;
+    width: 380px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-left: 60px;
+    flex-shrink: 0;
+  }
+
+  .icon-svg {
+    width: 240px;
+    height: 240px;
+    filter:
+      drop-shadow(0 0 25px rgba(120, 80, 255, 0.8))
+      drop-shadow(0 0 60px rgba(80, 140, 255, 0.35));
+  }
+
+  /* 중앙 컨텐츠 */
+  .center {
+    position: relative;
+    z-index: 10;
+    flex: 1;
+    padding: 0 40px 0 20px;
+  }
+
+  .tag {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 20px;
+    border: 1px solid rgba(130, 90, 255, 0.4);
+    background: rgba(100, 60, 255, 0.12);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2.5px;
+    color: rgba(170, 140, 255, 0.8);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  .main-title {
+    font-size: 72px;
+    font-weight: 900;
+    letter-spacing: -3px;
+    line-height: 1;
+    background: linear-gradient(135deg, #d0b0ff 0%, #90b8ff 50%, #b0e0ff 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 20px rgba(140, 100, 255, 0.5));
+    margin-bottom: 10px;
+  }
+
+  .sub-title {
+    font-size: 18px;
+    color: rgba(190, 210, 255, 0.55);
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    margin-bottom: 28px;
+  }
+
+  .sub-title b {
+    color: rgba(200, 220, 255, 0.8);
+    font-weight: 600;
+  }
+
+  /* 지원 엔진 태그 */
+  .engines {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .engine-tag {
+    padding: 5px 14px;
+    border-radius: 6px;
+    background: rgba(70, 50, 140, 0.3);
+    border: 1px solid rgba(100, 80, 200, 0.3);
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(190, 205, 255, 0.75);
+  }
+
+  /* 오른쪽 가격/정보 */
+  .right {
+    position: relative;
+    z-index: 10;
+    width: 280px;
+    padding-right: 60px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .price-box {
+    background: linear-gradient(135deg, rgba(100, 60, 220, 0.25), rgba(50, 100, 220, 0.2));
+    border: 1px solid rgba(120, 90, 255, 0.35);
+    border-radius: 16px;
+    padding: 20px 24px;
+    text-align: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .price-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: rgba(160, 140, 255, 0.6);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .price-num {
+    font-size: 42px;
+    font-weight: 900;
+    background: linear-gradient(135deg, #c0a0ff, #80b4ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -1px;
+    line-height: 1;
+  }
+
+  .price-period {
+    font-size: 14px;
+    color: rgba(170, 190, 255, 0.5);
+    margin-top: 4px;
+  }
+
+  .feature-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: right;
+  }
+
+  .feat {
+    font-size: 13px;
+    color: rgba(190, 205, 255, 0.6);
+    font-weight: 500;
+  }
+
+  .feat::before {
+    content: '✦ ';
+    color: rgba(140, 100, 255, 0.7);
+  }
+
+  /* 세로 구분선 */
+  .v-line {
+    position: relative;
+    z-index: 10;
+    width: 1px;
+    height: 260px;
+    background: linear-gradient(to bottom, transparent, rgba(100, 80, 255, 0.3) 30%, rgba(80, 130, 255, 0.3) 70%, transparent);
+    flex-shrink: 0;
+    margin: 0 20px;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bg"></div>
+  <div class="grid"></div>
+  <div class="light-beam"></div>
+  <div class="light-beam-r"></div>
+  <div class="h-line h-line-top"></div>
+  <div class="h-line h-line-bot"></div>
+
+  <!-- 왼쪽 아이콘 -->
+  <div class="left">
+    <svg class="icon-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#b080ff"/>
+          <stop offset="50%" style="stop-color:#7090ff"/>
+          <stop offset="100%" style="stop-color:#40c0ff"/>
+        </linearGradient>
+        <filter id="gl">
+          <feGaussianBlur stdDeviation="2.5" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path d="M30 95 Q28 70 50 65 L80 62 Q100 58 120 62 L150 65 Q172 70 170 95 L165 128 Q160 150 140 152 Q120 154 110 138 L90 138 Q80 154 60 152 Q40 150 35 128 Z"
+            fill="url(#cg)" opacity="0.92" filter="url(#gl)"/>
+      <path d="M42 95 Q40 74 58 70 L80 67 Q100 63 120 67 L142 70 Q160 74 158 95 L154 122 Q150 140 134 142 Q118 144 110 130 L90 130 Q82 144 66 142 Q50 140 46 122 Z"
+            fill="rgba(15,10,35,0.45)"/>
+      <rect x="55" y="87" width="10" height="30" rx="2" fill="white" opacity="0.92"/>
+      <rect x="48" y="94" width="24" height="10" rx="2" fill="white" opacity="0.92"/>
+      <circle cx="138" cy="92" r="7" fill="rgba(255,100,160,0.9)"/>
+      <circle cx="152" cy="102" r="7" fill="rgba(100,220,255,0.9)"/>
+      <circle cx="124" cy="102" r="7" fill="rgba(160,255,120,0.9)"/>
+      <circle cx="138" cy="112" r="7" fill="rgba(255,210,60,0.9)"/>
+      <g transform="translate(100,48)" opacity="0.92">
+        <text x="-22" y="4" font-size="13" font-weight="800" fill="#c090ff" font-family="monospace">KR</text>
+        <line x1="-2" y1="0" x2="8" y2="0" stroke="#80b4ff" stroke-width="2.5" stroke-linecap="round"/>
+        <polyline points="5,-4 10,0 5,4" fill="none" stroke="#80b4ff" stroke-width="2.5" stroke-linejoin="round"/>
+      </g>
+      <circle cx="78" cy="118" r="10" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+      <circle cx="78" cy="118" r="5" fill="rgba(255,255,255,0.3)"/>
+      <circle cx="122" cy="118" r="10" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+      <circle cx="122" cy="118" r="5" fill="rgba(255,255,255,0.3)"/>
+      <path d="M50 70 Q60 60 80 62" stroke="url(#cg)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+      <path d="M150 70 Q140 60 120 62" stroke="url(#cg)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+    </svg>
+  </div>
+
+  <!-- 중앙 텍스트 -->
+  <div class="center">
+    <div class="tag">Game Translation Tool</div>
+    <div class="main-title">게임번역기</div>
+    <div class="sub-title">외국어 게임을 <b>자연스러운 한국어</b>로 — AI 기반 자동 번역</div>
+    <div class="engines">
+      <span class="engine-tag">UE4 / UE5</span>
+      <span class="engine-tag">Unity</span>
+      <span class="engine-tag">RPG Maker</span>
+      <span class="engine-tag">Wolf RPG</span>
+      <span class="engine-tag">Ren'Py</span>
+      <span class="engine-tag">키리키리</span>
+      <span class="engine-tag">+ 더보기</span>
+    </div>
+  </div>
+
+  <div class="v-line"></div>
+
+  <!-- 오른쪽 가격 -->
+  <div class="right">
+    <div class="price-box">
+      <div class="price-label">월정액</div>
+      <div class="price-num">¥500</div>
+      <div class="price-period">/ 월</div>
+    </div>
+    <div class="feature-list">
+      <div class="feat">번역 비용 직접 부담 (API키)</div>
+      <div class="feat">모든 엔진 업데이트 포함</div>
+      <div class="feat">구매자 전용 Discord</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

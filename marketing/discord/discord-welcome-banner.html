@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1200px;
+    height: 440px;
+    overflow: hidden;
+    font-family: 'Segoe UI', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  }
+
+  .canvas {
+    width: 1200px;
+    height: 440px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 15% 50%, #1e0a4a 0%, transparent 50%),
+      radial-gradient(ellipse at 85% 30%, #0a1a4a 0%, transparent 50%),
+      linear-gradient(135deg, #0c0c1e 0%, #10102c 60%, #0a0a18 100%);
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(100, 70, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100, 70, 255, 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .deco-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1px solid rgba(100, 80, 255, 0.1);
+    pointer-events: none;
+  }
+  .deco-1 { width: 520px; height: 520px; top: -160px; left: -80px; }
+  .deco-2 { width: 320px; height: 320px; bottom: -100px; right: 60px; border-color: rgba(60,120,255,0.08); }
+
+  /* 상단 배지 */
+  .badge {
+    position: absolute;
+    top: 24px;
+    right: 40px;
+    z-index: 20;
+    background: linear-gradient(135deg, rgba(110, 70, 255, 0.2), rgba(50, 110, 255, 0.2));
+    border: 1px solid rgba(120, 90, 255, 0.3);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(180, 200, 255, 0.75);
+    letter-spacing: 1.5px;
+  }
+
+  /* 왼쪽 */
+  .left {
+    position: relative;
+    z-index: 10;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-left: 40px;
+    flex-shrink: 0;
+  }
+
+  .icon-svg {
+    width: 160px;
+    height: 160px;
+    filter:
+      drop-shadow(0 0 20px rgba(120, 80, 255, 0.8))
+      drop-shadow(0 0 50px rgba(80, 140, 255, 0.35));
+    margin-bottom: 14px;
+  }
+
+  .server-name {
+    font-size: 22px;
+    font-weight: 900;
+    text-align: center;
+    line-height: 1.2;
+    background: linear-gradient(135deg, #d0b0ff, #90b8ff, #b0e0ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    filter: drop-shadow(0 0 10px rgba(140, 100, 255, 0.4));
+  }
+
+  .server-sub {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 2.5px;
+    color: rgba(160, 180, 255, 0.4);
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* 세로 구분선 */
+  .divider {
+    position: relative;
+    z-index: 10;
+    width: 1px;
+    height: 300px;
+    background: linear-gradient(to bottom,
+      transparent,
+      rgba(120, 80, 255, 0.3) 25%,
+      rgba(80, 140, 255, 0.3) 75%,
+      transparent);
+    flex-shrink: 0;
+    margin: 0 10px;
+  }
+
+  /* 오른쪽 */
+  .right {
+    position: relative;
+    z-index: 10;
+    flex: 1;
+    padding: 30px 50px 30px 40px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .welcome-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: rgba(140, 100, 255, 0.65);
+    text-transform: uppercase;
+  }
+
+  .welcome-text {
+    font-size: 38px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -1px;
+    line-height: 1.1;
+    text-shadow: 0 0 30px rgba(120, 80, 255, 0.25);
+    margin-top: -4px;
+  }
+
+  .welcome-text span {
+    background: linear-gradient(90deg, #b080ff, #5090ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .desc {
+    font-size: 14px;
+    color: rgba(195, 210, 255, 0.55);
+    line-height: 1.65;
+  }
+
+  /* 스텝 */
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+  }
+
+  .step-num {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7040e0, #3870e0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: white;
+    flex-shrink: 0;
+    box-shadow: 0 0 10px rgba(100, 60, 255, 0.45);
+  }
+
+  .step-text {
+    font-size: 14px;
+    color: rgba(215, 225, 255, 0.8);
+    font-weight: 500;
+  }
+
+  .step-text code {
+    background: rgba(100, 80, 255, 0.18);
+    border: 1px solid rgba(100, 80, 255, 0.28);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12.5px;
+    color: #a0beff;
+  }
+
+  /* 채널 태그 */
+  .channels {
+    display: flex;
+    gap: 7px;
+    flex-wrap: wrap;
+  }
+
+  .ch-tag {
+    padding: 4px 11px;
+    border-radius: 20px;
+    background: rgba(75, 55, 150, 0.22);
+    border: 1px solid rgba(100, 80, 200, 0.22);
+    font-size: 12px;
+    color: rgba(185, 200, 255, 0.65);
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bg"></div>
+  <div class="grid"></div>
+  <div class="deco-ring deco-1"></div>
+  <div class="deco-ring deco-2"></div>
+  <div class="badge">구매자 전용 ✦</div>
+
+  <!-- 왼쪽 -->
+  <div class="left">
+    <svg class="icon-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#b080ff"/>
+          <stop offset="50%" style="stop-color:#7090ff"/>
+          <stop offset="100%" style="stop-color:#40c0ff"/>
+        </linearGradient>
+        <filter id="gl">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <path d="M30 95 Q28 70 50 65 L80 62 Q100 58 120 62 L150 65 Q172 70 170 95 L165 128 Q160 150 140 152 Q120 154 110 138 L90 138 Q80 154 60 152 Q40 150 35 128 Z"
+            fill="url(#cg)" opacity="0.92" filter="url(#gl)"/>
+      <path d="M42 95 Q40 74 58 70 L80 67 Q100 63 120 67 L142 70 Q160 74 158 95 L154 122 Q150 140 134 142 Q118 144 110 130 L90 130 Q82 144 66 142 Q50 140 46 122 Z"
+            fill="rgba(15,10,35,0.45)"/>
+      <rect x="55" y="87" width="10" height="30" rx="2" fill="white" opacity="0.9"/>
+      <rect x="48" y="94" width="24" height="10" rx="2" fill="white" opacity="0.9"/>
+      <circle cx="138" cy="92" r="7" fill="rgba(255,100,160,0.9)"/>
+      <circle cx="152" cy="102" r="7" fill="rgba(100,220,255,0.9)"/>
+      <circle cx="124" cy="102" r="7" fill="rgba(160,255,120,0.9)"/>
+      <circle cx="138" cy="112" r="7" fill="rgba(255,210,60,0.9)"/>
+      <g transform="translate(100,48)" opacity="0.9">
+        <text x="-22" y="4" font-size="13" font-weight="800" fill="#c090ff" font-family="monospace">KR</text>
+        <line x1="-2" y1="0" x2="8" y2="0" stroke="#80b4ff" stroke-width="2.5" stroke-linecap="round"/>
+        <polyline points="5,-4 10,0 5,4" fill="none" stroke="#80b4ff" stroke-width="2.5" stroke-linejoin="round"/>
+      </g>
+      <circle cx="78" cy="118" r="10" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+      <circle cx="78" cy="118" r="5" fill="rgba(255,255,255,0.3)"/>
+      <circle cx="122" cy="118" r="10" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+      <circle cx="122" cy="118" r="5" fill="rgba(255,255,255,0.3)"/>
+      <path d="M50 70 Q60 60 80 62" stroke="url(#cg)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+      <path d="M150 70 Q140 60 120 62" stroke="url(#cg)" stroke-width="5" fill="none" stroke-linecap="round" opacity="0.7"/>
+    </svg>
+    <div class="server-name">게임번역기<br>커뮤니티</div>
+    <div class="server-sub">Game Translator</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- 오른쪽 -->
+  <div class="right">
+    <div>
+      <div class="welcome-label">Welcome ✦</div>
+      <div class="welcome-text">구매해주셔서<br><span>감사합니다 🎉</span></div>
+    </div>
+
+    <div class="desc">
+      Fanbox 후원 시 DM으로 발송된 라이선스 키로<br>
+      아래 절차에 따라 구매자 역할을 받으세요.
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">🔑 <b>#인증하기</b> 채널에서 <code>/인증 XXXX-XXXX-XXXX-XXXX</code> 입력</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">📩 Fanbox에서 받은 <code>게임번역기_v4.exe</code> 실행 후 키 입력</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">🤖 AI API 키 입력 후 번역 시작 — 비용은 본인 부담</div>
+      </div>
+    </div>
+
+    <div class="channels">
+      <span class="ch-tag">📢 공지사항</span>
+      <span class="ch-tag">📥 업데이트</span>
+      <span class="ch-tag">🔑 인증하기</span>
+      <span class="ch-tag">💬 자유대화</span>
+      <span class="ch-tag">🐛 버그신고</span>
+      <span class="ch-tag">💡 엔진요청</span>
+    </div>
+  </div>
+</div>
+</body>
+</html>

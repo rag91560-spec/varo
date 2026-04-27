@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 630px;
+    height: 500px;
+    overflow: hidden;
+    font-family: 'Segoe UI', 'Noto Sans KR', 'Malgun Gothic', sans-serif;
+  }
+
+  .canvas {
+    width: 630px;
+    height: 500px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 0%, #2a1a0a 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 80%, #1a0a2a 0%, transparent 50%),
+      linear-gradient(160deg, #12100a 0%, #1e180a 50%, #100e08 100%);
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(200,160,60,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,160,60,.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .top-glow {
+    position: absolute;
+    top: -60px; left: 50%;
+    transform: translateX(-50%);
+    width: 400px; height: 300px;
+    background: radial-gradient(ellipse, rgba(220,160,40,.2) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  .border-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #c0a030 30%, #ffd060 70%, transparent);
+  }
+
+  .content {
+    position: relative;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    padding: 0 50px;
+  }
+
+  .icon-wrap { margin-bottom: 16px; }
+
+  .icon-svg {
+    width: 90px; height: 90px;
+    filter:
+      drop-shadow(0 0 16px rgba(220,160,40,.9))
+      drop-shadow(0 0 40px rgba(255,200,60,.4));
+  }
+
+  .plan-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: rgba(220,170,60,.7);
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .plan-name {
+    font-size: 28px;
+    font-weight: 900;
+    background: linear-gradient(135deg, #ffd060, #ffb030, #ffe080);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+  }
+
+  .price-row {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    margin-bottom: 4px;
+  }
+
+  .price-currency { font-size: 20px; font-weight: 700; color: rgba(220,180,80,.6); }
+  .price-num {
+    font-size: 52px; font-weight: 900;
+    background: linear-gradient(135deg, #ffc040, #ffdd80);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -2px; line-height: 1;
+  }
+  .price-period { font-size: 16px; color: rgba(200,160,60,.5); font-weight: 500; }
+
+  .price-note {
+    font-size: 11px;
+    color: rgba(220,180,80,.6);
+    margin-bottom: 6px;
+    font-weight: 600;
+  }
+
+  .lifetime-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(180,120,20,.25);
+    border: 1px solid rgba(220,160,40,.35);
+    border-radius: 20px;
+    padding: 3px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(255,200,80,.8);
+    margin-bottom: 16px;
+  }
+
+  .divider {
+    width: 100%; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(200,150,40,.3) 30%, rgba(240,180,40,.3) 70%, transparent);
+    margin-bottom: 16px;
+  }
+
+  .benefits {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    margin-bottom: 20px;
+  }
+
+  .benefit { display: flex; align-items: center; gap: 10px; }
+
+  .benefit-icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(180,120,20,.3), rgba(220,160,40,.2));
+    border: 1px solid rgba(200,150,40,.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+  }
+
+  .benefit-text { font-size: 13px; color: rgba(230,210,170,.75); font-weight: 500; }
+
+  .btn {
+    width: 100%; padding: 14px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #b08020, #d0a030);
+    font-size: 16px; font-weight: 800; color: #fff8e0;
+    text-align: center; letter-spacing: 0.5px;
+    box-shadow: 0 4px 24px rgba(180,130,20,.45), 0 0 0 1px rgba(220,170,40,.35);
+  }
+
+  .cancel-note {
+    margin-top: 10px;
+    font-size: 10px;
+    color: rgba(180,220,160,.5);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bg"></div>
+  <div class="grid"></div>
+  <div class="top-glow"></div>
+  <div class="border-top"></div>
+
+  <div class="content">
+    <div class="icon-wrap">
+      <svg class="icon-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#ffc040"/>
+            <stop offset="50%" style="stop-color:#e08020"/>
+            <stop offset="100%" style="stop-color:#ffdd80"/>
+          </linearGradient>
+          <filter id="gl">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <path d="M30 95 Q28 70 50 65 L80 62 Q100 58 120 62 L150 65 Q172 70 170 95 L165 128 Q160 150 140 152 Q120 154 110 138 L90 138 Q80 154 60 152 Q40 150 35 128 Z" fill="url(#cg)" opacity="0.92" filter="url(#gl)"/>
+        <path d="M42 95 Q40 74 58 70 L80 67 Q100 63 120 67 L142 70 Q160 74 158 95 L154 122 Q150 140 134 142 Q118 144 110 130 L90 130 Q82 144 66 142 Q50 140 46 122 Z" fill="rgba(20,15,5,0.45)"/>
+        <rect x="55" y="87" width="10" height="30" rx="2" fill="white" opacity="0.9"/>
+        <rect x="48" y="94" width="24" height="10" rx="2" fill="white" opacity="0.9"/>
+        <circle cx="138" cy="92" r="7" fill="rgba(255,100,160,0.9)"/>
+        <circle cx="152" cy="102" r="7" fill="rgba(100,220,255,0.9)"/>
+        <circle cx="124" cy="102" r="7" fill="rgba(160,255,120,0.9)"/>
+        <circle cx="138" cy="112" r="7" fill="rgba(255,210,60,0.9)"/>
+        <g transform="translate(100,48)" opacity="0.9">
+          <text x="-22" y="4" font-size="13" font-weight="800" fill="#ffc040" font-family="monospace">KR</text>
+          <line x1="-2" y1="0" x2="8" y2="0" stroke="#ffdd80" stroke-width="2.5" stroke-linecap="round"/>
+          <polyline points="5,-4 10,0 5,4" fill="none" stroke="#ffdd80" stroke-width="2.5" stroke-linejoin="round"/>
+        </g>
+        <circle cx="78" cy="118" r="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+        <circle cx="78" cy="118" r="4" fill="rgba(255,255,255,0.3)"/>
+        <circle cx="122" cy="118" r="9" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"/>
+        <circle cx="122" cy="118" r="4" fill="rgba(255,255,255,0.3)"/>
+        <path d="M50 70 Q60 60 80 62" stroke="url(#cg)" stroke-width="4.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+        <path d="M150 70 Q140 60 120 62" stroke="url(#cg)" stroke-width="4.5" fill="none" stroke-linecap="round" opacity="0.7"/>
+      </svg>
+    </div>
+
+    <div class="plan-label">Lifetime Plan</div>
+    <div class="plan-name">무제한 이용권</div>
+
+    <div class="price-row">
+      <span class="price-currency">¥</span>
+      <span class="price-num">2000</span>
+      <span class="price-period">일시불</span>
+    </div>
+    <div class="price-note">평생 이용 · 추가 결제 없음</div>
+    <div class="lifetime-badge">♾️ 만료 없는 영구 라이선스</div>
+
+    <div class="divider"></div>
+
+    <div class="benefits">
+      <div class="benefit">
+        <div class="benefit-icon">♾️</div>
+        <div class="benefit-text">만료 없는 영구 라이선스 즉시 발급</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">🎮</div>
+        <div class="benefit-text">UE4/UE5, Unity, RPG Maker 등 지원</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">🤖</div>
+        <div class="benefit-text">AI 기반 자연스러운 한국어 번역</div>
+      </div>
+      <div class="benefit">
+        <div class="benefit-icon">💬</div>
+        <div class="benefit-text">구매자 전용 Discord 서버 접근</div>
+      </div>
+    </div>
+
+    <div class="btn">후원하기</div>
+    <div class="cancel-note">결제 후 다음 달 구독 취소하셔도 됩니다</div>
+  </div>
+</div>
+</body>
+</html>

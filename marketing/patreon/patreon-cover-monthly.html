@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:460px;height:200px;overflow:hidden;font-family:'Segoe UI',sans-serif}
+.c{width:460px;height:200px;position:relative;display:flex;align-items:center;overflow:hidden}
+.bg{position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,#1e0a4a 0%,transparent 60%),radial-gradient(ellipse at 80% 30%,#0a1a4a 0%,transparent 50%),linear-gradient(135deg,#0c0c1e 0%,#10102c 60%,#0a0a18 100%)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(100,70,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(100,70,255,.05) 1px,transparent 1px);background-size:30px 30px}
+.left{position:relative;z-index:10;width:160px;display:flex;flex-direction:column;align-items:center;padding-left:20px}
+.icon{width:60px;height:60px;filter:drop-shadow(0 0 12px rgba(120,80,255,.8));margin-bottom:8px}
+.title{font-size:16px;font-weight:900;background:linear-gradient(135deg,#d0b0ff,#90b8ff,#b0e0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center}
+.sub{font-size:8px;font-weight:600;letter-spacing:2px;color:rgba(160,180,255,.4);text-transform:uppercase;margin-top:2px}
+.div{position:relative;z-index:10;width:1px;height:140px;background:linear-gradient(to bottom,transparent,rgba(120,80,255,.3) 25%,rgba(80,140,255,.3) 75%,transparent);margin:0 8px}
+.right{position:relative;z-index:10;flex:1;padding:15px 20px 15px 10px;display:flex;flex-direction:column;gap:6px}
+.label{font-size:8px;font-weight:700;letter-spacing:2px;color:rgba(140,100,255,.65);text-transform:uppercase}
+.pr{display:flex;align-items:baseline;gap:3px}
+.cur{font-size:14px;font-weight:700;color:rgba(180,200,255,.6)}
+.num{font-size:36px;font-weight:900;background:linear-gradient(135deg,#c0a0ff,#70a8ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-1px;line-height:1}
+.per{font-size:12px;color:rgba(160,180,255,.45);font-weight:500}
+.note{font-size:9px;color:rgba(160,200,255,.5);margin-top:-2px}
+.hd{width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(120,80,255,.3) 50%,transparent)}
+.b{display:flex;align-items:center;gap:6px;font-size:9px;color:rgba(200,215,255,.7)}
+.bi{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,rgba(120,80,255,.3),rgba(60,120,255,.3));border:1px solid rgba(120,90,255,.4);display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0}
+</style></head><body>
+<div class="c">
+<div class="bg"></div><div class="grid"></div>
+<div class="left">
+<svg class="icon" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#b080ff"/><stop offset="50%" style="stop-color:#7090ff"/><stop offset="100%" style="stop-color:#40c0ff"/></linearGradient></defs><path d="M30 95 Q28 70 50 65 L80 62 Q100 58 120 62 L150 65 Q172 70 170 95 L165 128 Q160 150 140 152 Q120 154 110 138 L90 138 Q80 154 60 152 Q40 150 35 128 Z" fill="url(#cg)" opacity="0.92"/><path d="M42 95 Q40 74 58 70 L80 67 Q100 63 120 67 L142 70 Q160 74 158 95 L154 122 Q150 140 134 142 Q118 144 110 130 L90 130 Q82 144 66 142 Q50 140 46 122 Z" fill="rgba(15,10,35,0.45)"/><rect x="55" y="87" width="10" height="30" rx="2" fill="white" opacity="0.9"/><rect x="48" y="94" width="24" height="10" rx="2" fill="white" opacity="0.9"/><circle cx="138" cy="92" r="7" fill="rgba(255,100,160,0.9)"/><circle cx="152" cy="102" r="7" fill="rgba(100,220,255,0.9)"/><circle cx="124" cy="102" r="7" fill="rgba(160,255,120,0.9)"/><circle cx="138" cy="112" r="7" fill="rgba(255,210,60,0.9)"/><g transform="translate(100,48)" opacity="0.9"><text x="-22" y="4" font-size="13" font-weight="800" fill="#c090ff" font-family="monospace">EN</text></g></svg>
+<div class="title">Monthly</div>
+<div class="sub">Monthly Plan</div>
+</div>
+<div class="div"></div>
+<div class="right">
+<div class="label">Subscription License</div>
+<div class="pr"><span class="cur">$</span><span class="num">5</span><span class="per">/ mo</span></div>
+<div class="note">Auto-renewed monthly</div>
+<div class="hd"></div>
+<div class="b"><div class="bi">🔑</div>30-day license key each month</div>
+<div class="b"><div class="bi">🎮</div>UE4/UE5, Unity, RPG Maker & more</div>
+<div class="b"><div class="bi">🤖</div>AI translation to your language</div>
+<div class="b"><div class="bi">💬</div>Discord server + updates</div>
+</div>
+</div></body></html>

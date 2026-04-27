@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 900px;
+    font-family: 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: #0d0d1a;
+    overflow: hidden;
+  }
+
+  .canvas {
+    width: 900px;
+    position: relative;
+    padding: 36px 40px 40px;
+  }
+
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 80% 0%, #0a1a3e 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 100%, #1a0a3e 0%, transparent 50%),
+      #0d0d1a;
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(100,70,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100,70,255,.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .content { position: relative; z-index: 10; }
+
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(120,80,255,.2);
+  }
+
+  .header-icon {
+    width: 48px; height: 48px;
+    background: linear-gradient(135deg, #7040e0, #3870e0);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    box-shadow: 0 0 16px rgba(100,60,220,.4);
+    flex-shrink: 0;
+  }
+
+  .header h1 { font-size: 20px; font-weight: 900; color: #fff; margin-bottom: 2px; }
+  .header p { font-size: 12px; color: rgba(200,215,255,.45); }
+
+  /* AI 카드 그리드 */
+  .grid-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+
+  .card {
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(120,80,255,.15);
+    border-radius: 12px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card.recommended {
+    border-color: rgba(80,200,120,.3);
+    background: rgba(40,120,70,.06);
+  }
+
+  .card.recommended::before {
+    content: '✅ 추천';
+    position: absolute;
+    top: 10px; right: 12px;
+    font-size: 10px;
+    font-weight: 700;
+    color: rgba(80,220,130,.8);
+    background: rgba(40,120,70,.3);
+    border: 1px solid rgba(60,180,100,.3);
+    border-radius: 20px;
+    padding: 2px 8px;
+  }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .card-icon {
+    font-size: 24px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .card-name { font-size: 15px; font-weight: 800; color: #fff; margin-bottom: 2px; }
+
+  .price-tag {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .price-free { background: rgba(40,140,80,.3); color: #50d090; border: 1px solid rgba(60,180,100,.3); }
+  .price-cheap { background: rgba(40,80,160,.3); color: #70a8ff; border: 1px solid rgba(60,120,220,.3); }
+  .price-mid { background: rgba(140,100,20,.3); color: #f0b050; border: 1px solid rgba(200,140,30,.3); }
+  .price-high { background: rgba(160,40,40,.3); color: #ff8080; border: 1px solid rgba(220,60,60,.3); }
+
+  .card-models {
+    font-size: 11px;
+    color: rgba(180,200,255,.4);
+    margin-top: 2px;
+  }
+
+  .card-divider {
+    height: 1px;
+    background: rgba(120,80,255,.12);
+    margin: 10px 0;
+  }
+
+  .card-url-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+  }
+
+  .card-url-label { font-size: 11px; color: rgba(180,200,255,.4); flex-shrink: 0; }
+
+  .card-url {
+    font-size: 11px;
+    color: #8090e0;
+    font-family: monospace;
+  }
+
+  .card-desc {
+    font-size: 12px;
+    color: rgba(200,215,255,.55);
+    line-height: 1.6;
+  }
+
+  .card-desc b { color: rgba(220,230,255,.8); }
+
+  /* 하단 팁 */
+  .tip {
+    padding: 13px 18px;
+    background: rgba(100,70,220,.1);
+    border: 1px solid rgba(120,80,255,.2);
+    border-radius: 10px;
+    font-size: 13px;
+    color: rgba(200,215,255,.7);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .tip-icon { font-size: 20px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bg"></div>
+  <div class="grid"></div>
+
+  <div class="content">
+    <div class="header">
+      <div class="header-icon">🤖</div>
+      <div>
+        <h1>AI 선택 가이드 — 어떤 AI를 써야 할까?</h1>
+        <p>번역 비용은 본인이 사용한 만큼 직접 부담합니다. API 키를 발급받아 번역기에 입력하세요.</p>
+      </div>
+    </div>
+
+    <div class="grid-cards">
+      <!-- Gemini -->
+      <div class="card recommended">
+        <div class="card-top">
+          <div class="card-icon">✨</div>
+          <div>
+            <div class="card-name">Google Gemini</div>
+            <span class="price-tag price-free">무료 (일일 한도 내)</span>
+            <div class="card-models">gemini-2.5-flash · gemini-2.5-pro</div>
+          </div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="card-url-row">
+          <span class="card-url-label">API 키 발급 →</span>
+          <span class="card-url">aistudio.google.com → Get API key</span>
+        </div>
+        <div class="card-desc">
+          Google 계정으로 즉시 무료 발급.<br>
+          일 1,500회 요청 무료. <b>처음 사용자에게 추천</b>.<br>
+          품질 양호, 한도 초과 시 소액 과금.
+        </div>
+      </div>
+
+      <!-- GPT-4o -->
+      <div class="card">
+        <div class="card-top">
+          <div class="card-icon">⚡</div>
+          <div>
+            <div class="card-name">OpenAI GPT-4o</div>
+            <span class="price-tag price-high">유료 · 1M 토큰 ≈ $2.50</span>
+            <div class="card-models">gpt-4o · gpt-4o-mini · gpt-4.1</div>
+          </div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="card-url-row">
+          <span class="card-url-label">API 키 발급 →</span>
+          <span class="card-url">platform.openai.com → API keys</span>
+        </div>
+        <div class="card-desc">
+          <b>최고 번역 품질</b>. 자연스러운 한국어.<br>
+          gpt-4o-mini는 1M ≈ $0.15로 저렴.<br>
+          결제 수단 등록 후 최소 $5 크레딧 충전 필요.
+        </div>
+      </div>
+
+      <!-- DeepSeek -->
+      <div class="card">
+        <div class="card-top">
+          <div class="card-icon">🐋</div>
+          <div>
+            <div class="card-name">DeepSeek</div>
+            <span class="price-tag price-cheap">초저가 · 1M 토큰 ≈ $0.07</span>
+            <div class="card-models">deepseek-chat · deepseek-reasoner</div>
+          </div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="card-url-row">
+          <span class="card-url-label">API 키 발급 →</span>
+          <span class="card-url">platform.deepseek.com → API keys</span>
+        </div>
+        <div class="card-desc">
+          <b>가장 저렴한 선택지</b>. 품질 준수.<br>
+          중국 서비스라 간혹 불안정하거나 속도 저하.<br>
+          비용 최소화 시 추천.
+        </div>
+      </div>
+
+      <!-- Claude -->
+      <div class="card">
+        <div class="card-top">
+          <div class="card-icon">🔵</div>
+          <div>
+            <div class="card-name">Claude (Anthropic)</div>
+            <span class="price-tag price-mid">유료 · 1M 토큰 ≈ $3.00</span>
+            <div class="card-models">claude-sonnet · claude-haiku · claude-opus</div>
+          </div>
+        </div>
+        <div class="card-divider"></div>
+        <div class="card-url-row">
+          <span class="card-url-label">API 키 발급 →</span>
+          <span class="card-url">console.anthropic.com → API keys</span>
+        </div>
+        <div class="card-desc">
+          <b>자연스러운 한국어</b>에 최적화.<br>
+          GPT-4o와 동급 품질.<br>
+          크레딧 충전 후 사용.
+        </div>
+      </div>
+    </div>
+
+    <div class="tip">
+      <div class="tip-icon">💡</div>
+      <div>
+        <b>추천 시작 순서</b> &nbsp;→&nbsp;
+        ① Gemini 무료로 시작
+        &nbsp;→&nbsp; ② 한도 초과 시 GPT-4o-mini
+        &nbsp;→&nbsp; ③ 품질이 아쉬우면 GPT-4o 또는 Claude
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

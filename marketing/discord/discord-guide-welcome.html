@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 900px;
+    font-family: 'Malgun Gothic', 'Noto Sans KR', 'Segoe UI', sans-serif;
+    background: #0d0d1a;
+    overflow: hidden;
+  }
+
+  .canvas {
+    width: 900px;
+    position: relative;
+    padding: 40px;
+    overflow: hidden;
+  }
+
+  .bg {
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 10% 0%, #1a0a3e 0%, transparent 50%),
+      radial-gradient(ellipse at 90% 100%, #0a1a3e 0%, transparent 50%),
+      #0d0d1a;
+  }
+
+  .grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(100,70,255,.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100,70,255,.04) 1px, transparent 1px);
+    background-size: 36px 36px;
+  }
+
+  .content { position: relative; z-index: 10; }
+
+  /* 헤더 */
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 28px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid rgba(120,80,255,.2);
+  }
+
+  .header-icon {
+    width: 56px; height: 56px;
+    background: linear-gradient(135deg, #7040e0, #3870e0);
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 26px;
+    box-shadow: 0 0 20px rgba(100,60,220,.4);
+    flex-shrink: 0;
+  }
+
+  .header-text h1 {
+    font-size: 22px;
+    font-weight: 900;
+    color: #fff;
+    letter-spacing: -0.5px;
+    margin-bottom: 3px;
+  }
+
+  .header-text p { font-size: 13px; color: rgba(200,215,255,.5); }
+
+  /* 스텝 */
+  .steps { display: flex; flex-direction: column; gap: 14px; }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    background: rgba(255,255,255,.03);
+    border: 1px solid rgba(120,80,255,.15);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+
+  .step-left {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .step-num {
+    width: 32px; height: 32px;
+    background: linear-gradient(135deg, #7040e0, #3870e0);
+    border-radius: 50%;
+    color: white;
+    font-size: 14px;
+    font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 12px rgba(100,60,220,.4);
+  }
+
+  .step-line {
+    width: 2px;
+    flex: 1;
+    min-height: 10px;
+    background: linear-gradient(to bottom, rgba(100,60,220,.3), transparent);
+    border-radius: 1px;
+  }
+
+  .step-body { flex: 1; }
+
+  .step-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: #fff;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-title .emoji { font-size: 18px; }
+
+  .step-desc {
+    font-size: 13px;
+    color: rgba(200,215,255,.6);
+    line-height: 1.7;
+  }
+
+  .step-desc code {
+    background: rgba(100,80,255,.18);
+    border: 1px solid rgba(100,80,255,.3);
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    color: #a0beff;
+  }
+
+  .step-desc b { color: rgba(220,230,255,.85); }
+
+  /* 하단 노트 */
+  .footer-note {
+    margin-top: 20px;
+    padding: 12px 16px;
+    background: rgba(255,200,60,.06);
+    border: 1px solid rgba(255,200,60,.2);
+    border-radius: 8px;
+    font-size: 12px;
+    color: rgba(255,220,120,.6);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="bg"></div>
+  <div class="grid"></div>
+
+  <div class="content">
+    <div class="header">
+      <div class="header-icon">🎮</div>
+      <div class="header-text">
+        <h1>게임번역기 구매자 전용 서버에 오신 것을 환영합니다!</h1>
+        <p>Fanbox 후원 감사합니다. 아래 절차를 따라 구매자 역할을 받으세요.</p>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num">1</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <div class="step-title"><span class="emoji">🔑</span> 라이선스 인증</div>
+          <div class="step-desc">
+            <b>#🔑인증하기</b> 채널에서 아래 명령어를 입력하세요.<br>
+            <code>/인증 XXXX-XXXX-XXXX-XXXX</code><br>
+            <span style="margin-top:4px;display:block">Fanbox DM으로 받은 키를 입력하면 구매자 역할이 자동 부여됩니다.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num">2</div>
+          <div class="step-line"></div>
+        </div>
+        <div class="step-body">
+          <div class="step-title"><span class="emoji">📥</span> 번역기 다운로드</div>
+          <div class="step-desc">
+            Fanbox 게시물에서 <b>게임번역기_v4.exe</b> 를 다운로드합니다.<br>
+            실행 시 처음 한 번만 키 입력 창이 뜨며, 이후 자동 저장됩니다.
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-left">
+          <div class="step-num">3</div>
+        </div>
+        <div class="step-body">
+          <div class="step-title"><span class="emoji">🤖</span> AI 키 설정 후 번역 시작</div>
+          <div class="step-desc">
+            번역기 상단 <b>AI 설정</b>에서 AI를 선택하고 API 키를 입력합니다.<br>
+            처음이라면 <b>Gemini 무료</b>를 추천합니다. 아래 AI 선택 가이드를 참고하세요.<br>
+            <span style="color:rgba(180,200,255,.4);font-size:12px;margin-top:2px;display:block">⚠ 번역 비용(API 사용료)은 본인 부담입니다</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      ⚠️ 후원 취소 시 최대 10분 내 라이선스가 자동 비활성화됩니다. 재후원 시 Fanbox DM으로 새 키가 발송됩니다.
+    </div>
+  </div>
+</div>
+</body>
+</html>

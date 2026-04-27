@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #111; font-family: 'Segoe UI', sans-serif; }
+
+  .card {
+    width: 480px; height: 320px;
+    border-radius: 20px; padding: 40px;
+    display: flex; flex-direction: column; justify-content: center;
+    position: relative; overflow: hidden;
+    margin: 20px;
+  }
+
+  /* Monthly */
+  .monthly { background: linear-gradient(135deg, #1a1a2e, #16213e); border: 1px solid #2a3a5e; }
+  .monthly .accent { color: #64b5f6; }
+
+  /* Yearly */
+  .yearly { background: linear-gradient(135deg, #1a2e1a, #162e16); border: 1px solid #2a5e3a; }
+  .yearly .accent { color: #81c784; }
+
+  /* Lifetime */
+  .lifetime { background: linear-gradient(135deg, #2e1a2e, #3e1640); border: 1px solid #5e2a5e; }
+  .lifetime .accent { color: #ce93d8; }
+  .lifetime .badge {
+    position: absolute; top: 20px; right: 20px;
+    background: linear-gradient(135deg, #ff6f00, #ff8f00);
+    color: #fff; font-size: 13px; font-weight: 700;
+    padding: 4px 14px; border-radius: 20px;
+    letter-spacing: 0.5px;
+  }
+
+  .tier-label { font-size: 14px; text-transform: uppercase; letter-spacing: 2px; color: #888; margin-bottom: 8px; }
+  .tier-name { font-size: 32px; font-weight: 700; color: #fff; margin-bottom: 16px; }
+  .price { font-size: 48px; font-weight: 800; margin-bottom: 8px; }
+  .price small { font-size: 18px; font-weight: 400; color: #888; }
+  .desc { font-size: 15px; color: #aaa; line-height: 1.6; margin-top: 12px; }
+  .old-price { text-decoration: line-through; color: #666; font-size: 20px; margin-right: 8px; }
+
+  .game-icon { position: absolute; bottom: 20px; right: 20px; font-size: 48px; opacity: 0.15; }
+</style>
+</head>
+<body>
+
+<!-- ===== FANBOX (Japanese) ===== -->
+
+<div class="card monthly" id="fanbox-monthly">
+  <div class="tier-label">MONTHLY</div>
+  <div class="tier-name">월간 라이선스</div>
+  <div class="price accent">500<small>엔/월</small></div>
+  <div class="desc">30일간 전체 기능 이용 가능<br>모든 게임 엔진 지원</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+<div class="card yearly" id="fanbox-yearly">
+  <div class="tier-label">YEARLY</div>
+  <div class="tier-name">연간 라이선스</div>
+  <div class="price accent">2,000<small>엔/월</small></div>
+  <div class="desc">365일간 전체 기능 이용 가능<br>다음 달 결제는 취소해도 됩니다</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+<div class="card lifetime" id="fanbox-lifetime">
+  <div class="badge">SALE</div>
+  <div class="tier-label">LIFETIME</div>
+  <div class="tier-name">영구 라이선스</div>
+  <div class="price accent"><span class="old-price">5,000엔</span>3,000<small>엔/월</small></div>
+  <div class="desc">영구 이용 가능 · 기간 제한 없음<br>다음 달 결제는 취소해도 됩니다</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+<!-- ===== PATREON (English) ===== -->
+
+<div class="card monthly" id="patreon-monthly">
+  <div class="tier-label">MONTHLY</div>
+  <div class="tier-name">Monthly License</div>
+  <div class="price accent">$5<small>/mo</small></div>
+  <div class="desc">30 days of full access<br>All game engines supported</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+<div class="card yearly" id="patreon-yearly">
+  <div class="tier-label">YEARLY</div>
+  <div class="tier-name">Yearly License</div>
+  <div class="price accent">$20<small>/mo</small></div>
+  <div class="desc">365 days of full access<br>Cancel after first payment</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+<div class="card lifetime" id="patreon-lifetime">
+  <div class="badge">SALE</div>
+  <div class="tier-label">LIFETIME</div>
+  <div class="tier-name">Lifetime License</div>
+  <div class="price accent"><span class="old-price">$50</span>$30<small>/mo</small></div>
+  <div class="desc">Permanent access — yours forever<br>Cancel after first payment</div>
+  <div class="game-icon">🎮</div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:460px;height:200px;overflow:hidden;font-family:'Segoe UI',sans-serif}
+.c{width:460px;height:200px;position:relative;display:flex;align-items:center;overflow:hidden}
+.bg{position:absolute;inset:0;background:radial-gradient(ellipse at 20% 50%,#1a1408 0%,transparent 60%),radial-gradient(ellipse at 80% 30%,#140e04 0%,transparent 50%),linear-gradient(135deg,#12100a 0%,#1e180a 60%,#100e08 100%)}
+.grid{position:absolute;inset:0;background-image:linear-gradient(rgba(180,140,40,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(180,140,40,.05) 1px,transparent 1px);background-size:30px 30px}
+.tb{position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#c0a030,#ffd060,#c0a030);z-index:30}
+.left{position:relative;z-index:10;width:160px;display:flex;flex-direction:column;align-items:center;padding-left:20px}
+.icon{width:60px;height:60px;filter:drop-shadow(0 0 12px rgba(180,140,40,.8));margin-bottom:8px}
+.title{font-size:16px;font-weight:900;background:linear-gradient(135deg,#ffd060,#ffb030,#ffe080);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;text-align:center}
+.sub{font-size:8px;font-weight:600;letter-spacing:2px;color:rgba(200,160,80,.4);text-transform:uppercase;margin-top:2px}
+.div{position:relative;z-index:10;width:1px;height:140px;background:linear-gradient(to bottom,transparent,rgba(180,140,40,.3) 25%,rgba(200,150,40,.3) 75%,transparent);margin:0 8px}
+.right{position:relative;z-index:10;flex:1;padding:15px 20px 15px 10px;display:flex;flex-direction:column;gap:6px}
+.label{font-size:8px;font-weight:700;letter-spacing:2px;color:rgba(200,150,50,.65);text-transform:uppercase}
+.pr{display:flex;align-items:baseline;gap:3px}
+.cur{font-size:14px;font-weight:700;color:rgba(220,190,100,.6)}
+.num{font-size:36px;font-weight:900;background:linear-gradient(135deg,#e0a820,#ffc840);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-1px;line-height:1}
+.per{font-size:12px;color:rgba(200,160,80,.45);font-weight:500}
+.note{font-size:9px;color:rgba(220,180,100,.5);margin-top:-2px}
+.hd{width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(180,140,40,.3) 50%,transparent)}
+.b{display:flex;align-items:center;gap:6px;font-size:9px;color:rgba(255,220,160,.7)}
+.bi{width:14px;height:14px;border-radius:50%;background:linear-gradient(135deg,rgba(180,140,40,.3),rgba(160,120,30,.3));border:1px solid rgba(180,140,40,.4);display:flex;align-items:center;justify-content:center;font-size:7px;flex-shrink:0}
+.cn{font-size:8px;color:rgba(180,220,160,.45);margin-top:2px}
+</style></head><body>
+<div class="c">
+<div class="tb"></div>
+<div class="bg"></div><div class="grid"></div>
+<div class="left">
+<svg class="icon" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="cg" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:#ffc040"/><stop offset="50%" style="stop-color:#e08020"/><stop offset="100%" style="stop-color:#ffdd80"/></linearGradient></defs><path d="M30 95 Q28 70 50 65 L80 62 Q100 58 120 62 L150 65 Q172 70 170 95 L165 128 Q160 150 140 152 Q120 154 110 138 L90 138 Q80 154 60 152 Q40 150 35 128 Z" fill="url(#cg)" opacity="0.92"/><path d="M42 95 Q40 74 58 70 L80 67 Q100 63 120 67 L142 70 Q160 74 158 95 L154 122 Q150 140 134 142 Q118 144 110 130 L90 130 Q82 144 66 142 Q50 140 46 122 Z" fill="rgba(20,16,8,0.55)"/><rect x="55" y="87" width="10" height="30" rx="2" fill="white" opacity="0.9"/><rect x="48" y="94" width="24" height="10" rx="2" fill="white" opacity="0.9"/><circle cx="138" cy="92" r="7" fill="rgba(255,200,60,0.9)"/><circle cx="152" cy="102" r="7" fill="rgba(255,160,40,0.9)"/><circle cx="124" cy="102" r="7" fill="rgba(255,220,100,0.9)"/><circle cx="138" cy="112" r="7" fill="rgba(200,140,30,0.9)"/><g transform="translate(100,48)" opacity="0.9"><text x="-22" y="4" font-size="13" font-weight="800" fill="#ffa820" font-family="monospace">EN</text></g></svg>
+<div class="title">Lifetime</div>
+<div class="sub">Lifetime Plan</div>
+</div>
+<div class="div"></div>
+<div class="right">
+<div class="label">Lifetime License</div>
+<div class="pr"><span class="cur">$</span><span class="num">30</span><span class="per">one-time</span></div>
+<div class="note">Permanent access — no recurring fees</div>
+<div class="hd"></div>
+<div class="b"><div class="bi">♾️</div>Permanent license — never expires</div>
+<div class="b"><div class="bi">🎮</div>UE4/UE5, Unity, RPG Maker & more</div>
+<div class="b"><div class="bi">🤖</div>AI translation to your language</div>
+<div class="b"><div class="bi">💬</div>Discord server + updates</div>
+<div class="cn">Cancel after payment — license stays active</div>
+</div>
+</div></body></html>
