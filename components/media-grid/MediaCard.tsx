@@ -220,7 +220,7 @@ export function MediaCard({
           {merge.showMerge && (
             <div className="absolute inset-0 bg-accent/20 flex items-center justify-center pointer-events-none z-20">
               <span className="bg-accent text-white text-xs font-bold px-3 py-1.5 rounded-lg">
-                {t("createGroup") || "그룹 만들기"}
+                {t("createGroup")}
               </span>
             </div>
           )}

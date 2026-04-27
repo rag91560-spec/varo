@@ -6,6 +6,7 @@ import {
   PlusIcon,
   Edit3Icon,
   Trash2Icon,
+  BookOpenIcon,
 } from "lucide-react"
 import type { MediaCategory } from "@/lib/types"
 import type { TranslationKey } from "@/lib/i18n"
@@ -90,6 +91,7 @@ export function CategorySidebar({
   onRenameCategory,
   onDeleteCategory,
   onMoveItem,
+  onEditGlossary,
   collapsed,
   t,
 }: {
@@ -102,6 +104,7 @@ export function CategorySidebar({
   onRenameCategory: (id: number, name: string) => void
   onDeleteCategory: (id: number) => void
   onMoveItem?: (itemId: number, categoryId: number | null) => void
+  onEditGlossary?: (id: number) => void
   collapsed: boolean
   t: (key: TranslationKey) => string
 }) {
@@ -225,6 +228,18 @@ export function CategorySidebar({
               <Edit3Icon className="size-3" />
               {t("rename")}
             </button>
+            {onEditGlossary && (
+              <button
+                onClick={() => {
+                  onEditGlossary(contextMenu.id)
+                  setContextMenu(null)
+                }}
+                className="w-full px-3 py-1.5 text-xs text-left text-text-secondary hover:bg-overlay-4 flex items-center gap-2"
+              >
+                <BookOpenIcon className="size-3" />
+                {t("editGlossary")}
+              </button>
+            )}
             <button
               onClick={() => {
                 onDeleteCategory(contextMenu.id)

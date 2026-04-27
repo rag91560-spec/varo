@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { XIcon, FolderOpenIcon, LinkIcon, FileTextIcon, MusicIcon, FolderIcon, Loader2Icon, SearchIcon, DownloadIcon } from "lucide-react"
+import { XIcon, FolderOpenIcon, LinkIcon, FileTextIcon, MusicIcon, FolderIcon, Loader2Icon, SearchIcon, DownloadIcon, SparklesIcon, CheckCircleIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { FolderBrowser } from "@/components/FolderBrowser"
 import { useLocale } from "@/hooks/use-locale"
@@ -12,6 +12,8 @@ interface AddMediaModalProps {
   mediaType: "video" | "audio"
   onClose: () => void
   onAdded: (item: VideoItem | AudioItem) => void
+  onRequestBulkTranslate?: (audioIds: number[], categoryId: number | null) => void
+  onCategoryCreated?: (category: { id: number; name: string }) => void
 }
 
 type Tab = "local" | "folder" | "url" | "browse"
@@ -34,7 +36,13 @@ function baseName(name: string): string {
   return i >= 0 ? fname.slice(0, i).toLowerCase() : fname.toLowerCase()
 }
 
-export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProps) {
+export function AddMediaModal({
+  mediaType,
+  onClose,
+  onAdded,
+  onRequestBulkTranslate,
+  onCategoryCreated,
+}: AddMediaModalProps) {
   const { t } = useLocale()
   const [tab, setTab] = useState<Tab>("local")
   const [loading, setLoading] = useState(false)
@@ -47,6 +55,12 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
   const [url, setUrl] = useState("")
   const [urlTitle, setUrlTitle] = useState("")
   const [folderPath, setFolderPath] = useState("")
+  const [folderAutoCategory, setFolderAutoCategory] = useState(true)
+  const [folderScanResult, setFolderScanResult] = useState<{
+    audioIds: number[]
+    categoryId: number | null
+    categoryName: string
+  } | null>(null)
   const [browsePath, setBrowsePath] = useState("")
 
   // YouTube download state
@@ -180,20 +194,58 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
   }
 
   const handleAddFolder = async () => {
-    if (!folderPath.trim()) return
+    const path = folderPath.trim()
+    if (!path) return
     setLoading(true)
     setError("")
     try {
-      const items = await api.audio.scanFolder(folderPath.trim())
+      // Optionally create a category from folder basename first
+      let categoryId: number | null = null
+      let categoryName = ""
+      if (folderAutoCategory) {
+        const base = path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path
+        categoryName = base
+        try {
+          const cat = await api.categories.create({
+            name: base,
+            media_type: isVideo ? "video" : "audio",
+          })
+          categoryId = cat.id
+          onCategoryCreated?.({ id: cat.id, name: cat.name })
+        } catch (e) {
+          // Non-fatal: continue scan without category
+          console.warn("Failed to create category from folder name:", e)
+        }
+      }
+
+      const result = await api.audio.scanFolder(path, { categoryId })
+      const items = result.created_items
       for (const item of items) {
         onAdded(item)
       }
-      onClose()
+
+      // Show "translate now" prompt if we have scanned items and parent supports it
+      if (items.length > 0 && onRequestBulkTranslate) {
+        setFolderScanResult({
+          audioIds: items.map((it) => it.id),
+          categoryId,
+          categoryName,
+        })
+      } else {
+        onClose()
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleStartBulkTranslate = () => {
+    if (!folderScanResult || !onRequestBulkTranslate) return
+    const { audioIds, categoryId } = folderScanResult
+    onRequestBulkTranslate(audioIds, categoryId)
+    onClose()
   }
 
   const handleAddUrl = async () => {
@@ -287,7 +339,7 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
             }`}
           >
             <SearchIcon className="size-4" />
-            탐색
+            {t("browse")}
           </button>
         </div>
 
@@ -335,22 +387,62 @@ export function AddMediaModal({ mediaType, onClose, onAdded }: AddMediaModalProp
 
         {tab === "folder" && (
           <div className="space-y-3">
-            <input
-              type="text"
-              value={folderPath}
-              onChange={(e) => { setFolderPath(e.target.value); setError("") }}
-              placeholder="D:\music\album"
-              className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
-            />
-            <p className="text-xs text-text-tertiary">
-              {t("audio")}: mp3, wav, flac, ogg, m4a, aac, wma, opus
-              <br />
-              {t("script")}: srt, vtt, lrc, txt
-            </p>
-            <Button onClick={handleAddFolder} disabled={!folderPath.trim() || loading} loading={loading} className="w-full">
-              {loading && <Loader2Icon className="size-4 animate-spin" />}
-              {t("batchScan")}
-            </Button>
+            {folderScanResult ? (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm text-green-400">
+                  <CheckCircleIcon className="size-4 shrink-0" />
+                  <span>
+                    {folderScanResult.audioIds.length} {t("audioScanComplete")}
+                    {folderScanResult.categoryName && (
+                      <span className="text-text-tertiary">
+                        {" "}
+                        · {folderScanResult.categoryName}
+                      </span>
+                    )}
+                  </span>
+                </div>
+                {onRequestBulkTranslate && (
+                  <Button
+                    onClick={handleStartBulkTranslate}
+                    className="w-full"
+                  >
+                    <SparklesIcon className="size-4" />
+                    {t("translateNow")}
+                  </Button>
+                )}
+                <Button variant="secondary" onClick={onClose} className="w-full">
+                  {t("close")}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="text"
+                  value={folderPath}
+                  onChange={(e) => { setFolderPath(e.target.value); setError("") }}
+                  placeholder="D:\music\album"
+                  className="w-full h-10 px-3 text-sm rounded-lg border border-border bg-background text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent"
+                />
+                <p className="text-xs text-text-tertiary">
+                  {t("audio")}: mp3, wav, flac, ogg, m4a, aac, wma, opus
+                  <br />
+                  {t("script")}: srt, vtt, lrc, txt
+                </p>
+                <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={folderAutoCategory}
+                    onChange={(e) => setFolderAutoCategory(e.target.checked)}
+                    className="size-4 accent-accent"
+                  />
+                  {t("autoCreateCategoriesFromFolders")}
+                </label>
+                <Button onClick={handleAddFolder} disabled={!folderPath.trim() || loading} loading={loading} className="w-full">
+                  {loading && <Loader2Icon className="size-4 animate-spin" />}
+                  {t("batchScan")}
+                </Button>
+              </>
+            )}
           </div>
         )}
 

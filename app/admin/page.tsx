@@ -240,7 +240,7 @@ export default function AdminPage() {
                         <div className="text-right">
                           <p className="text-[11px] text-text-tertiary">
                             {user.last_sync_at
-                              ? new Date(user.last_sync_at).toLocaleDateString("ko")
+                              ? new Date(user.last_sync_at).toLocaleDateString()
                               : "-"}
                           </p>
                         </div>

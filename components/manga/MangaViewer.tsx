@@ -22,6 +22,7 @@ import { Paywall } from "@/components/ui/paywall"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
 import type { DetectorType, RenderConfig, MangaTranslationEntry } from "@/lib/types"
+import { useLocale } from "@/hooks/use-locale"
 import { useMangaTranslation } from "@/hooks/use-manga"
 import { useLicenseStatus } from "@/hooks/use-api"
 import { TranslationOverlay } from "./TranslationOverlay"
@@ -39,7 +40,7 @@ interface MangaViewerProps {
   onUpdate?: () => void
 }
 
-type ViewMode = "scroll" | "page"
+type ViewMode = "scroll" | "page" | "webtoon"
 type TranslationMode = "off" | "overlay" | "panel" | "rendered"
 
 const DEFAULT_CONFIG: Partial<RenderConfig> = {
@@ -73,6 +74,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
   const containerRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
+  const { t } = useLocale()
   const { license, refresh: refreshLicense } = useLicenseStatus()
   const { translation, loading: translating, translate } = useMangaTranslation(mangaId, currentPage)
 
@@ -116,7 +118,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
 
   // Scroll mode: track current page from scroll position
   useEffect(() => {
-    if (viewMode !== "scroll" || !scrollContainerRef.current) return
+    if ((viewMode !== "scroll" && viewMode !== "webtoon") || !scrollContainerRef.current) return
     const container = scrollContainerRef.current
 
     function handleScroll() {
@@ -172,12 +174,12 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
         setShowPaywall(true)
         setTranslationMode("off")
       } else {
-        setRenderError(e instanceof Error ? e.message : "번역 실패")
+        setRenderError(e instanceof Error ? e.message : t("translationFailed"))
       }
     } finally {
       setRendering(false)
     }
-  }, [hasRendered, translation, translate, license.valid, detector, mangaId, currentPage, config])
+  }, [hasRendered, translation, translate, license.valid, detector, mangaId, currentPage, config, t])
 
   const handleSaveRegions = useCallback(async () => {
     if (!editedPositions) return
@@ -187,11 +189,11 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
       setEditingRegions(false)
       setHasRendered(false) // require re-render with new regions
     } catch (e) {
-      setRenderError(e instanceof Error ? e.message : "저장 실패")
+      setRenderError(e instanceof Error ? e.message : t("saveFailed"))
     } finally {
       setSavingRegions(false)
     }
-  }, [editedPositions, mangaId, currentPage])
+  }, [editedPositions, mangaId, currentPage, t])
 
   const handleImgLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
     const img = e.currentTarget
@@ -200,10 +202,10 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
 
   const isLoading = translating || rendering
   const btnLabel = isLoading
-    ? (translating ? "번역 중..." : "합성 중...")
+    ? (translating ? t("translating") : t("compositing"))
     : hasRendered
-      ? (translationMode === "rendered" ? "결과 끄기" : "결과 보기")
-      : "번역 & 적용"
+      ? (translationMode === "rendered" ? t("hideResult") : t("showResult"))
+      : t("translateAndApply")
 
   return (
     <div ref={containerRef} className={cn("flex flex-col h-full bg-black", fullscreen && "fixed inset-0 z-50")}>
@@ -223,10 +225,10 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setViewMode(viewMode === "scroll" ? "page" : "scroll")}
+            onClick={() => setViewMode(viewMode === "page" ? "scroll" : viewMode === "scroll" ? "webtoon" : "page")}
             className="text-xs"
           >
-            {viewMode === "scroll" ? "페이지" : "스크롤"}
+            {viewMode === "page" ? t("pageMode") : viewMode === "scroll" ? t("scrollMode") : t("webtoonMode")}
           </Button>
 
           {/* Zoom */}
@@ -260,8 +262,8 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
           {translation && !isLoading && (
             <div className="flex items-center rounded-md border border-border overflow-hidden">
               {([
-                { mode: "overlay" as TranslationMode, label: "오버레이", title: "원본 위에 번역 텍스트 표시" },
-                { mode: "panel" as TranslationMode, label: "패널", title: "우측 패널에 번역문 목록 표시" },
+                { mode: "overlay" as TranslationMode, label: t("overlay"), title: t("overlayModeDesc") },
+                { mode: "panel" as TranslationMode, label: t("panelMode"), title: t("panelModeDesc") },
               ]).map(({ mode, label, title }, i) => (
                 <button
                   key={mode}
@@ -296,7 +298,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
                 className="gap-1.5 text-xs"
               >
                 <CheckIcon className="size-3.5" />
-                완료
+                {t("completed")}
               </Button>
             ) : (
               <Button
@@ -309,10 +311,10 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
                   setViewMode("page")
                 }}
                 className="gap-1.5 text-xs"
-                title="말풍선 위에 드래그해서 직접 번역 영역 지정"
+                title={t("dragToSpecifyArea")}
               >
                 <SquareDashedIcon className="size-3.5" />
-                영역 지정
+                {t("specifyArea")}
               </Button>
             )
           )}
@@ -323,10 +325,10 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
             size="sm"
             onClick={() => setRenderSettingsOpen(!renderSettingsOpen)}
             className="gap-1.5 text-xs"
-            title="폰트·인페인팅 설정 변경 후 재렌더링"
+            title={t("reRenderAfterSettings")}
           >
             <PaintbrushIcon className="size-3.5" />
-            렌더 설정
+            {t("mangaRenderSettings")}
           </Button>
 
           {/* Image Manager */}
@@ -334,13 +336,13 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
             variant="ghost"
             size="icon"
             onClick={() => setImageManagerOpen(true)}
-            title="이미지 순서 변경·추가·삭제"
+            title={t("manageImagesDesc")}
           >
             <GripVerticalIcon className="size-4" />
           </Button>
 
           {/* Fullscreen */}
-          <Button variant="ghost" size="icon" onClick={() => setFullscreen(!fullscreen)} title="전체화면">
+          <Button variant="ghost" size="icon" onClick={() => setFullscreen(!fullscreen)} title={t("fullscreen")}>
             {fullscreen ? <MinimizeIcon className="size-4" /> : <MaximizeIcon className="size-4" />}
           </Button>
         </div>
@@ -413,7 +415,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
                     className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-md bg-black/60 hover:bg-black/80 text-white text-xs transition-all backdrop-blur-sm"
                   >
                     <XIcon className="size-3.5" />
-                    오버레이 끄기
+                    {t("hideOverlay")}
                   </button>
                 </>
               )}
@@ -429,17 +431,23 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
           </button>
         </div>
       ) : (
-        /* Scroll mode */
+        /* Scroll / Webtoon mode */
         <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-          <div className="flex flex-col items-center py-4 gap-1" style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}>
+          <div
+            className={cn(
+              "flex flex-col items-center",
+              viewMode === "webtoon" ? "gap-0 max-w-[720px] mx-auto" : "py-4 gap-1"
+            )}
+            style={{ transform: `scale(${zoom})`, transformOrigin: "top center" }}
+          >
             {Array.from({ length: pageCount }, (_, i) => i + 1).map((page) => (
-              <div key={page} data-page={page} className="relative w-full max-w-3xl">
+              <div key={page} data-page={page} className={cn("relative w-full", viewMode !== "webtoon" && "max-w-3xl")}>
                 <img
                   src={translationMode === "rendered" && page === currentPage
                     ? `${api.manga.renderedImageUrl(mangaId, page)}?v=${renderKey}`
                     : api.manga.imageUrl(mangaId, page)}
                   alt={`Page ${page}`}
-                  className="w-full"
+                  className="w-full block"
                   loading="lazy"
                 />
               </div>
@@ -486,7 +494,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
           <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
             <span className="text-sm font-semibold text-text-primary flex items-center gap-2">
               <PaintbrushIcon className="size-4" />
-              렌더 설정
+              {t("mangaRenderSettings")}
             </span>
             <Button
               variant="ghost"
@@ -495,7 +503,7 @@ export function MangaViewer({ mangaId, pageCount, initialPage = 1, onBack, onUpd
               className="gap-1.5 text-xs text-text-secondary hover:text-text-primary"
             >
               <XIcon className="size-3.5" />
-              닫기
+              {t("close")}
             </Button>
           </div>
           <RenderSettings

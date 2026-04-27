@@ -1,6 +1,7 @@
 "use client"
 
 import { cn } from "@/lib/utils"
+import { useLocale } from "@/hooks/use-locale"
 import {
   CameraIcon,
   PlayIcon,
@@ -43,6 +44,7 @@ export function CapturePanel({
   onToggleOverlay,
   licensed = false,
 }: CapturePanelProps) {
+  const { t } = useLocale()
   return (
     <div className="space-y-4">
       {/* Capture controls */}
@@ -56,7 +58,7 @@ export function CapturePanel({
           )}
         >
           <CameraIcon className="size-4" />
-          {loading ? "캡처 중..." : "캡처 + 번역"}
+          {loading ? t("capturing") : t("captureAndTranslate")}
         </button>
 
         {!capturing ? (
@@ -66,7 +68,7 @@ export function CapturePanel({
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-overlay-4 transition-all disabled:opacity-50"
           >
             <PlayIcon className="size-4" />
-            자동 캡처
+            {t("autoCapture")}
           </button>
         ) : (
           <button
@@ -74,7 +76,7 @@ export function CapturePanel({
             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-all"
           >
             <SquareIcon className="size-4" />
-            자동 중지
+            {t("autoStop")}
           </button>
         )}
 
@@ -88,7 +90,7 @@ export function CapturePanel({
           )}
         >
           {settings.overlayEnabled ? <EyeIcon className="size-4" /> : <EyeOffIcon className="size-4" />}
-          오버레이
+          {t("overlay")}
         </button>
       </div>
 
@@ -99,7 +101,7 @@ export function CapturePanel({
           className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border border-border-subtle text-text-secondary hover:text-text-primary hover:bg-overlay-4 transition-all"
         >
           <CropIcon className="size-3.5" />
-          영역 선택
+          {t("selectArea")}
         </button>
         {settings.region && (
           <>
@@ -115,19 +117,19 @@ export function CapturePanel({
 
       {/* Language: Source → Target */}
       <div>
-        <label className="text-[11px] text-text-tertiary mb-1.5 block">번역 방향</label>
+        <label className="text-[11px] text-text-tertiary mb-1.5 block">{t("translationDirection")}</label>
         <div className="flex items-center gap-2">
           <select
             value={settings.language}
             onChange={(e) => onUpdateSettings({ language: e.target.value })}
             className="flex-1 bg-overlay-4 border border-border-subtle rounded-lg px-2.5 py-1.5 text-sm text-text-primary [&>option]:bg-[#1a1a2e] [&>option]:text-white"
           >
-            <option value="auto">자동 감지</option>
-            <option value="ja">일본어</option>
-            <option value="en">영어</option>
-            <option value="zh">중국어 (간체)</option>
-            <option value="zh-tw">중국어 (번체)</option>
-            <option value="ko">한국어</option>
+            <option value="auto">{t("autoDetect")}</option>
+            <option value="ja">{t("japanese")}</option>
+            <option value="en">{t("english")}</option>
+            <option value="zh">{t("chineseSimplified")}</option>
+            <option value="zh-tw">{t("chineseTraditional")}</option>
+            <option value="ko">{t("korean")}</option>
           </select>
           <ArrowRightIcon className="size-4 text-text-tertiary shrink-0" />
           <select
@@ -135,10 +137,10 @@ export function CapturePanel({
             onChange={(e) => onUpdateSettings({ targetLang: e.target.value })}
             className="flex-1 bg-overlay-4 border border-border-subtle rounded-lg px-2.5 py-1.5 text-sm text-text-primary [&>option]:bg-[#1a1a2e] [&>option]:text-white"
           >
-            <option value="ko">한국어</option>
-            <option value="en">영어</option>
-            <option value="ja">일본어</option>
-            <option value="zh">중국어</option>
+            <option value="ko">{t("korean")}</option>
+            <option value="en">{t("english")}</option>
+            <option value="ja">{t("japanese")}</option>
+            <option value="zh">{t("chinese")}</option>
           </select>
         </div>
       </div>
@@ -147,10 +149,10 @@ export function CapturePanel({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <div className="flex items-center gap-1 mb-1">
-            <label className="text-[11px] text-text-tertiary">번역 제공자</label>
+            <label className="text-[11px] text-text-tertiary">{t("translationProvider")}</label>
             {!licensed && (
               <span className="text-[10px] text-text-tertiary flex items-center gap-0.5">
-                <LockIcon className="size-2.5" /> AI 잠금
+                <LockIcon className="size-2.5" /> {t("aiLock")}
               </span>
             )}
           </div>
@@ -163,9 +165,9 @@ export function CapturePanel({
             }}
             className="w-full bg-overlay-4 border border-border-subtle rounded-lg px-2.5 py-1.5 text-sm text-text-primary [&>option]:bg-[#1a1a2e] [&>option]:text-white"
           >
-            <option value="offline">오프라인 (NLLB)</option>
+            <option value="offline">{t("offlineNLLB")}</option>
             <option value="claude" disabled={!licensed}>
-              {licensed ? "Claude" : "Claude (라이선스 필요)"}
+              {licensed ? "Claude" : t("claudeLicenseRequired")}
             </option>
             <option value="openai" disabled={!licensed}>
               {licensed ? "OpenAI" : "OpenAI (라이선스 필요)"}
@@ -173,18 +175,18 @@ export function CapturePanel({
             <option value="gemini" disabled={!licensed}>
               {licensed ? "Gemini" : "Gemini (라이선스 필요)"}
             </option>
-            <option value="test">테스트 (Echo)</option>
+            <option value="test">{t("testEcho")}</option>
           </select>
         </div>
 
         <div>
-          <label className="text-[11px] text-text-tertiary mb-1 block">OCR 엔진</label>
+          <label className="text-[11px] text-text-tertiary mb-1 block">{t("ocrEngine")}</label>
           <select
             value={settings.ocrEngine}
             onChange={(e) => onUpdateSettings({ ocrEngine: e.target.value as LiveSettings["ocrEngine"] })}
             className="w-full bg-overlay-4 border border-border-subtle rounded-lg px-2.5 py-1.5 text-sm text-text-primary [&>option]:bg-[#1a1a2e] [&>option]:text-white"
           >
-            <option value="auto">자동 (추천)</option>
+            <option value="auto">{t("autoRecommended")}</option>
             <option value="winocr">Windows OCR</option>
           </select>
         </div>
@@ -193,21 +195,21 @@ export function CapturePanel({
       {/* Advanced toggles */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
-          <label className="text-[11px] text-text-tertiary">자동 간격</label>
+          <label className="text-[11px] text-text-tertiary">{t("autoInterval")}</label>
           <select
             value={settings.autoIntervalMs}
             onChange={(e) => onUpdateSettings({ autoIntervalMs: Number(e.target.value) })}
             className="bg-overlay-4 border border-border-subtle rounded px-2 py-1 text-xs text-text-primary [&>option]:bg-[#1a1a2e] [&>option]:text-white"
           >
-            <option value={1000}>1초</option>
-            <option value={2000}>2초</option>
-            <option value={3000}>3초</option>
-            <option value={5000}>5초</option>
+            <option value={1000}>{t("interval1s")}</option>
+            <option value={2000}>{t("interval2s")}</option>
+            <option value={3000}>{t("interval3s")}</option>
+            <option value={5000}>{t("interval5s")}</option>
           </select>
         </div>
 
         <div className="flex items-center gap-2">
-          <label className="text-[11px] text-text-tertiary">오버레이 불투명도</label>
+          <label className="text-[11px] text-text-tertiary">{t("overlayOpacity")}</label>
           <input
             type="range"
             min={20}
@@ -223,7 +225,7 @@ export function CapturePanel({
 
       {/* Hotkey hints */}
       <div className="text-[11px] text-text-tertiary space-y-0.5">
-        <p>Ctrl+Shift+T: 캡처  |  Ctrl+Shift+O: 오버레이  |  Ctrl+Shift+R: 영역 선택</p>
+        <p>Ctrl+Shift+T: {t("captureAndTranslate")}  |  Ctrl+Shift+O: {t("overlay")}  |  Ctrl+Shift+R: {t("selectArea")}</p>
       </div>
     </div>
   )

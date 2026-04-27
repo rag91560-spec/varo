@@ -8,6 +8,7 @@ import { AIChatToggle } from "./AIChatToggle"
 import { UpdateBanner } from "@/components/UpdateBanner"
 import { SyncWorker } from "@/components/SyncWorker"
 import { AIChatProvider } from "@/hooks/use-ai-chat"
+import { useLocale } from "@/hooks/use-locale"
 
 /** Routes that render without Sidebar/UpdateBanner (standalone windows) */
 const BARE_ROUTES = ["/overlay", "/region-select"]
@@ -35,12 +36,18 @@ function getRouteForFile(file: File): string | null {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const { t } = useLocale()
   const isBare = BARE_ROUTES.some((r) => pathname.startsWith(r))
   const [dragOver, setDragOver] = useState(false)
 
   const handleDragOver = useCallback((e: DragEvent) => {
-    // Only handle external file drops, not internal DnD
-    if (e.dataTransfer.types.includes("Files")) {
+    const types = e.dataTransfer.types
+    // Skip internal media DnD (cards between folders)
+    if (types.includes("application/x-media-item") || types.includes("application/x-game-id")) {
+      return
+    }
+    // Only handle external file drops
+    if (types.includes("Files")) {
       e.preventDefault()
       e.stopPropagation()
       if (pathname !== "/library") {
@@ -89,7 +96,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         {dragOver && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-accent/10 border-4 border-dashed border-accent rounded-xl pointer-events-none">
             <div className="px-8 py-4 rounded-xl bg-surface/90 backdrop-blur shadow-lg text-lg font-semibold text-accent">
-              파일을 여기에 놓으세요
+              {t("dropFilesHere")}
             </div>
           </div>
         )}

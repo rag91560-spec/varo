@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { useLocale } from "@/hooks/use-locale"
 import { api } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -46,10 +47,10 @@ function formatSize(bytes: number | null): string {
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
 }
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return ""
   const d = new Date(iso)
-  return d.toLocaleDateString("ko-KR", {
+  return d.toLocaleDateString(locale === "ko" ? "ko-KR" : "en-US", {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
@@ -67,6 +68,7 @@ export function FolderBrowser({
   maxHeight = "280px",
   className,
 }: FolderBrowserProps) {
+  const { t, locale } = useLocale()
   const [currentPath, setCurrentPath] = useState(initialPath)
   const [pathInput, setPathInput] = useState(initialPath)
   const [entries, setEntries] = useState<FSEntry[]>([])
@@ -185,7 +187,7 @@ export function FolderBrowser({
           className="size-7"
           onClick={goBack}
           disabled={history.length === 0}
-          title="뒤로"
+          title={t("back")}
         >
           <ChevronLeftIcon className="size-4" />
         </Button>
@@ -195,7 +197,7 @@ export function FolderBrowser({
           className="size-7"
           onClick={goUp}
           disabled={parentPath == null}
-          title="상위 폴더"
+          title={t("parentFolder")}
         >
           <ChevronUpIcon className="size-4" />
         </Button>
@@ -205,7 +207,7 @@ export function FolderBrowser({
             type="text"
             value={pathInput}
             onChange={(e) => setPathInput(e.target.value)}
-            placeholder="경로를 입력하세요..."
+            placeholder={t("enterPath")}
             className="flex-1 rounded-md border border-border-subtle bg-background px-2 py-1 text-sm text-text-primary outline-none focus:border-accent"
           />
         </form>
@@ -215,7 +217,7 @@ export function FolderBrowser({
           size="icon"
           className="size-7"
           onClick={handleBrowseDialog}
-          title="폴더 찾아보기"
+          title={t("browseFolder")}
         >
           <FolderOpenIcon className="size-4" />
         </Button>
@@ -230,20 +232,20 @@ export function FolderBrowser({
       <div className="overflow-auto" style={{ maxHeight }}>
         {loading ? (
           <div className="flex items-center justify-center py-8 text-sm text-text-secondary">
-            불러오는 중...
+            {t("loading")}
           </div>
         ) : entries.length === 0 ? (
           <div className="flex items-center justify-center py-8 text-sm text-text-tertiary">
-            {error ? "접근할 수 없습니다" : "빈 폴더"}
+            {error ? t("cannotAccess") : t("emptyFolder")}
           </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-surface-elevated text-left text-xs text-text-secondary">
               <tr>
-                <th className="px-3 py-1.5 font-medium">이름</th>
-                <th className="px-3 py-1.5 font-medium w-20">유형</th>
-                <th className="px-3 py-1.5 font-medium w-20 text-right">크기</th>
-                <th className="hidden sm:table-cell px-3 py-1.5 font-medium w-36">수정일</th>
+                <th className="px-3 py-1.5 font-medium">{t("name")}</th>
+                <th className="px-3 py-1.5 font-medium w-20">{t("type")}</th>
+                <th className="px-3 py-1.5 font-medium w-20 text-right">{t("size")}</th>
+                <th className="hidden sm:table-cell px-3 py-1.5 font-medium w-36">{t("modified")}</th>
               </tr>
             </thead>
             <tbody>
@@ -263,16 +265,16 @@ export function FolderBrowser({
                   </td>
                   <td className="px-3 py-1.5 text-text-tertiary">
                     {entry.type === "drive"
-                      ? "드라이브"
+                      ? t("drive")
                       : entry.type === "folder"
-                        ? "폴더"
-                        : entry.name.split(".").pop()?.toUpperCase() || "파일"}
+                        ? t("folder")
+                        : entry.name.split(".").pop()?.toUpperCase() || t("file")}
                   </td>
                   <td className="px-3 py-1.5 text-right text-text-tertiary">
                     {formatSize(entry.size)}
                   </td>
                   <td className="hidden sm:table-cell px-3 py-1.5 text-text-tertiary">
-                    {formatDate(entry.modified)}
+                    {formatDate(entry.modified, locale)}
                   </td>
                 </tr>
               ))}

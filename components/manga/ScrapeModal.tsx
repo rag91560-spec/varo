@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { FolderBrowser } from "@/components/FolderBrowser"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { useLocale } from "@/hooks/use-locale"
 
 interface ScrapeModalProps {
   open: boolean
@@ -16,6 +17,7 @@ interface ScrapeModalProps {
 type Tab = "upload" | "browse"
 
 export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
+  const { t } = useLocale()
   const [tab, setTab] = useState<Tab>("upload")
 
   useEffect(() => {
@@ -42,7 +44,7 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
                   : "text-text-tertiary hover:text-text-primary"
               )}
             >
-              파일 업로드
+              {t("fileUpload")}
             </button>
             <button
               onClick={() => setTab("browse")}
@@ -53,7 +55,7 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
                   : "text-text-tertiary hover:text-text-primary"
               )}
             >
-              탐색
+              {t("browse")}
             </button>
           </div>
           <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
@@ -75,6 +77,7 @@ export function ScrapeModal({ open, onClose, onComplete }: ScrapeModalProps) {
 // --- Upload Tab ---
 
 function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onComplete: () => void; open: boolean }) {
+  const { t } = useLocale()
   const [title, setTitle] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [previews, setPreviews] = useState<string[]>([])
@@ -112,7 +115,7 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
   const handleUpload = useCallback(async () => {
     if (files.length === 0) return
     if (!title.trim()) {
-      setError("제목을 입력해주세요")
+      setError(t("pleaseEnterTitle"))
       return
     }
     setUploading(true)
@@ -127,10 +130,10 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
         onClose()
       }, 1000)
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "업로드 실패")
+      setError(e instanceof Error ? e.message : t("uploadFailed"))
       setUploading(false)
     }
-  }, [title, files, onComplete, onClose])
+  }, [title, files, onComplete, onClose, t])
 
   const removeFile = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index))
@@ -143,7 +146,7 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="제목..."
+        placeholder={t("titlePlaceholder")}
         className={cn(
           "w-full px-3 py-2.5 rounded-lg text-sm",
           "bg-surface-elevated border border-border-subtle",
@@ -174,22 +177,22 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
           disabled={uploading}
         >
           <UploadIcon className="size-8" />
-          <span className="text-sm">이미지 파일 선택</span>
-          <span className="text-xs">여러 파일 선택 가능</span>
+          <span className="text-sm">{t("selectImageFiles")}</span>
+          <span className="text-xs">{t("multipleFilesAllowed")}</span>
         </button>
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm text-text-secondary">
               <ImageIcon className="size-4 inline mr-1" />
-              {files.length}장 선택됨
+              {t("filesSelected").replace("{count}", String(files.length))}
             </span>
             <button
               onClick={() => fileInputRef.current?.click()}
               className="text-xs text-accent hover:underline"
               disabled={uploading}
             >
-              다시 선택
+              {t("selectAgain")}
             </button>
           </div>
 
@@ -229,12 +232,12 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
             {progress >= 100 ? (
               <>
                 <CheckCircleIcon className="size-4 text-green-500" />
-                <span className="text-green-500">완료!</span>
+                <span className="text-green-500">{t("uploadComplete")}</span>
               </>
             ) : (
               <>
                 <Loader2Icon className="size-4 animate-spin text-accent" />
-                <span className="text-text-secondary">업로드 중...</span>
+                <span className="text-text-secondary">{t("uploading")}</span>
               </>
             )}
           </div>
@@ -248,7 +251,7 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
         disabled={files.length === 0}
         className="w-full"
       >
-        업로드 ({files.length}장)
+        {t("uploadCount").replace("{count}", String(files.length))}
       </Button>
     </div>
   )
@@ -257,6 +260,7 @@ function UploadTab({ onClose, onComplete, open }: { onClose: () => void; onCompl
 // --- Browse Tab ---
 
 function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: () => void }) {
+  const { t } = useLocale()
   const [selectedFolder, setSelectedFolder] = useState("")
   const [title, setTitle] = useState("")
   const [loading, setLoading] = useState(false)
@@ -271,7 +275,7 @@ function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: (
       const res = await api.filesystem.browse(selectedFolder, ".jpg,.jpeg,.png,.bmp,.webp")
       const imageFiles = res.entries.filter(e => e.type === "file")
       if (imageFiles.length === 0) {
-        setError("이미지 파일이 없습니다")
+        setError(t("noImageFiles"))
         setLoading(false)
         return
       }
@@ -285,7 +289,7 @@ function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: (
         }
       }
       if (files.length === 0) {
-        setError("파일을 읽을 수 없습니다")
+        setError(t("cannotReadFile"))
         setLoading(false)
         return
       }
@@ -293,7 +297,7 @@ function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: (
       onComplete()
       onClose()
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "추가 실패")
+      setError(e instanceof Error ? e.message : t("addFailed"))
     } finally {
       setLoading(false)
     }
@@ -305,7 +309,7 @@ function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: (
         type="text"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="제목..."
+        placeholder={t("titlePlaceholder")}
         className={cn(
           "w-full px-3 py-2 rounded-lg text-sm",
           "bg-surface-elevated border border-border-subtle",
@@ -323,7 +327,7 @@ function BrowseTab({ onClose, onComplete }: { onClose: () => void; onComplete: (
         <div className="flex items-center gap-2">
           <span className="flex-1 text-xs text-text-secondary truncate">{selectedFolder}</span>
           <Button size="sm" onClick={handleAdd} loading={loading} disabled={!title.trim()}>
-            폴더에서 추가
+            {t("addFromFolder")}
           </Button>
         </div>
       )}

@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
-import { XIcon, FolderIcon, ChevronDownIcon } from "lucide-react"
+import { XIcon, FolderIcon, ChevronDownIcon, SparklesIcon, Trash2Icon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLocale } from "@/hooks/use-locale"
 import type { MediaCategory } from "@/lib/types"
@@ -12,6 +12,8 @@ interface SelectionBarProps {
   categories: MediaCategory[]
   onBulkMove: (categoryId: number | null) => void
   onDeselectAll: () => void
+  onBulkTranslate?: () => void
+  onBulkDelete?: () => void
 }
 
 export function SelectionBar({
@@ -19,6 +21,8 @@ export function SelectionBar({
   categories,
   onBulkMove,
   onDeselectAll,
+  onBulkTranslate,
+  onBulkDelete,
 }: SelectionBarProps) {
   const { t } = useLocale()
   const [showDropdown, setShowDropdown] = useState(false)
@@ -76,6 +80,32 @@ export function SelectionBar({
           </div>
         )}
       </div>
+
+      {/* Bulk translate button */}
+      {onBulkTranslate && (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={onBulkTranslate}
+          className="gap-1.5"
+        >
+          <SparklesIcon className="size-3.5" />
+          {t("translate")}
+        </Button>
+      )}
+
+      {/* Bulk delete */}
+      {onBulkDelete && (
+        <Button
+          size="sm"
+          variant="destructive"
+          onClick={onBulkDelete}
+          className="gap-1.5"
+        >
+          <Trash2Icon className="size-3.5" />
+          {t("delete")}
+        </Button>
+      )}
 
       {/* Deselect all */}
       <button

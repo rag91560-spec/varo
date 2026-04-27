@@ -5,6 +5,7 @@ import { XIcon, PlusIcon, Loader2Icon, Trash2Icon, GripVerticalIcon, SaveIcon } 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { useLocale } from "@/hooks/use-locale"
 
 interface ImageManagerProps {
   mangaId: number
@@ -20,6 +21,7 @@ interface PageItem {
 }
 
 export function ImageManager({ mangaId, pageCount, open, onClose, onUpdate }: ImageManagerProps) {
+  const { t } = useLocale()
   const [pages, setPages] = useState<PageItem[]>([])
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState<number | null>(null)
@@ -141,12 +143,12 @@ export function ImageManager({ mangaId, pageCount, open, onClose, onUpdate }: Im
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border-subtle shrink-0">
-          <h2 className="text-base font-semibold text-text-primary">이미지 관리</h2>
+          <h2 className="text-base font-semibold text-text-primary">{t("imageManagement")}</h2>
           <div className="flex items-center gap-2">
             {hasChanges && (
               <Button size="sm" onClick={handleSave} loading={saving}>
                 <SaveIcon className="size-4 mr-1" />
-                저장
+                {t("save")}
               </Button>
             )}
             <button onClick={onClose} className="text-text-tertiary hover:text-text-primary transition-colors">
@@ -223,7 +225,7 @@ export function ImageManager({ mangaId, pageCount, open, onClose, onUpdate }: Im
               ) : (
                 <>
                   <PlusIcon className="size-5" />
-                  <span className="text-[10px]">추가</span>
+                  <span className="text-[10px]">{t("add")}</span>
                 </>
               )}
             </button>
@@ -242,10 +244,10 @@ export function ImageManager({ mangaId, pageCount, open, onClose, onUpdate }: Im
         {/* Footer */}
         <div className="px-5 py-3 border-t border-border-subtle shrink-0 flex items-center justify-between">
           <span className="text-xs text-text-tertiary">
-            드래그하여 순서 변경 | {pages.length}장
+            {t("dragToReorder")} | {pages.length}{t("pageCount")}
           </span>
           {hasChanges && (
-            <span className="text-xs text-accent">변경사항이 있습니다</span>
+            <span className="text-xs text-accent">{t("hasChanges")}</span>
           )}
         </div>
       </div>

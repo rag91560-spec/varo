@@ -3,6 +3,7 @@
 import { XIcon } from "lucide-react"
 import type { MangaTranslationEntry } from "@/lib/types"
 import { cn } from "@/lib/utils"
+import { useLocale } from "@/hooks/use-locale"
 
 interface TranslationPanelProps {
   entries: MangaTranslationEntry[]
@@ -11,6 +12,7 @@ interface TranslationPanelProps {
 }
 
 export function TranslationPanel({ entries, open, onClose }: TranslationPanelProps) {
+  const { t } = useLocale()
   return (
     <div
       className={cn(
@@ -20,20 +22,20 @@ export function TranslationPanel({ entries, open, onClose }: TranslationPanelPro
       )}
     >
       <div className="flex items-center justify-between px-4 py-3 border-b border-border-subtle">
-        <h3 className="text-sm font-semibold text-text-primary">번역 텍스트</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{t("translationText")}</h3>
         <button
           onClick={onClose}
           className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-text-secondary hover:text-text-primary hover:bg-surface-2 transition-all"
         >
           <XIcon className="size-3.5" />
-          닫기
+          {t("close")}
         </button>
       </div>
 
       <div className="overflow-y-auto h-[calc(100%-49px)] p-4 space-y-3">
         {entries.length === 0 ? (
           <p className="text-sm text-text-tertiary text-center py-8">
-            번역 결과가 없습니다
+            {t("noTranslationResults")}
           </p>
         ) : (
           entries.map((entry, i) => (

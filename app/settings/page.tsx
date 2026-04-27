@@ -127,11 +127,11 @@ export default function SettingsPage() {
       const res = await api.settings.testKey(providerId, key)
       setTestResult((prev) => ({ ...prev, [providerId]: res }))
     } catch {
-      setTestResult((prev) => ({ ...prev, [providerId]: { ok: false, error: "연결 실패" } }))
+      setTestResult((prev) => ({ ...prev, [providerId]: { ok: false, error: t("connectionFailed") } }))
     } finally {
       setTestingKey(null)
     }
-  }, [keys])
+  }, [keys, t])
 
   const handleSave = useCallback(async () => {
     setSaving(true)
@@ -528,10 +528,10 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <DownloadIcon className="size-5 text-accent" />
-              런처 업데이트
+              {t("launcherUpdate")}
             </CardTitle>
             <CardDescription>
-              현재 버전: <span className="font-mono text-text-primary">v{appVersion}</span>
+              {t("currentVersion")} <span className="font-mono text-text-primary">v{appVersion}</span>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -550,19 +550,19 @@ export default function SettingsPage() {
                     // If update is available, the onUpdateAvailable listener will fire
                   } catch (e: unknown) {
                     setUpdateStatus("error")
-                    setUpdateError(e instanceof Error ? e.message : "업데이트 확인 실패")
+                    setUpdateError(e instanceof Error ? e.message : t("updateCheckFailed"))
                   }
                 }}
               >
                 <RefreshCwIcon className="size-4" />
-                업데이트 확인
+                {t("checkForUpdates")}
               </Button>
             )}
 
             {updateStatus === "checking" && (
               <div className="flex items-center gap-2 text-sm text-text-secondary">
                 <Loader2Icon className="size-4 animate-spin text-accent" />
-                업데이트 확인 중...
+                {t("checkingForUpdates")}
               </div>
             )}
 
@@ -570,10 +570,10 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1.5 text-sm text-success">
                   <CheckIcon className="size-4" />
-                  최신 버전입니다
+                  {t("upToDate")}
                 </span>
                 <Button variant="ghost" size="sm" onClick={() => setUpdateStatus("idle")}>
-                  다시 확인
+                  {t("checkAgain")}
                 </Button>
               </div>
             )}
@@ -582,7 +582,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm text-text-secondary">
                   <Loader2Icon className="size-4 animate-spin text-accent" />
-                  다운로드 중... {updateProgress > 0 && `${updateProgress}%`}
+                  {t("downloadingPercent").replace("{percentage}", updateProgress > 0 ? String(updateProgress) : "0")}
                 </div>
                 {updateProgress > 0 && (
                   <div className="h-1.5 bg-overlay-4 rounded-full overflow-hidden">
@@ -597,21 +597,21 @@ export default function SettingsPage() {
 
             {updateStatus === "downloaded" && (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-success">업데이트 다운로드 완료!</span>
+                <span className="text-sm text-success">{t("updateDownloaded")}</span>
                 <Button
                   size="sm"
                   onClick={() => window.electronAPI?.installUpdate()}
                 >
-                  지금 설치 (재시작)
+                  {t("installNowRestart")}
                 </Button>
               </div>
             )}
 
             {updateStatus === "error" && (
               <div className="flex items-center justify-between">
-                <span className="text-sm text-error">{updateError || "업데이트 확인 실패"}</span>
+                <span className="text-sm text-error">{updateError || t("updateCheckFailed")}</span>
                 <Button variant="ghost" size="sm" onClick={() => setUpdateStatus("idle")}>
-                  다시 시도
+                  {t("retry")}
                 </Button>
               </div>
             )}

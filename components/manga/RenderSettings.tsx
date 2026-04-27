@@ -99,7 +99,7 @@ export function RenderSettings({ mangaId, currentPage, totalPages, detector, onD
         {t("mangaRenderSettings")}
       </h3>
       <p className="text-[11px] text-text-tertiary leading-relaxed -mt-1">
-        폰트·인페인팅 방식을 바꾼 뒤 <strong className="text-text-secondary">재렌더링</strong> 버튼으로 다시 적용할 수 있습니다.
+        {t("renderSettingsHint")}
       </p>
 
       {/* Text Detection */}
@@ -166,7 +166,7 @@ export function RenderSettings({ mangaId, currentPage, totalPages, detector, onD
               >
                 <span>{f.name} <span className="opacity-60">({f.type})</span></span>
                 {!f.installed && (
-                  <span className="ml-1.5 text-[10px] text-amber-500/80">설치 필요</span>
+                  <span className="ml-1.5 text-[10px] text-amber-500/80">{t("installRequired")}</span>
                 )}
               </button>
               {!f.installed && (
@@ -236,7 +236,7 @@ export function RenderSettings({ mangaId, currentPage, totalPages, detector, onD
           className="w-full"
           size="sm"
         >
-          {rendering ? t("mangaRendering") : `재렌더링 (${currentPage}페이지)`}
+          {rendering ? t("mangaRendering") : `${t("reRender")} (${currentPage}${t("pageCount")})`}
         </Button>
         <Button
           variant="secondary"

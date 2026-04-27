@@ -1,12 +1,11 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useState, useCallback, useEffect, useMemo, useRef, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   Loader2Icon,
   FilmIcon,
   PlusIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useLocale } from "@/hooks/use-locale"
@@ -14,25 +13,33 @@ import { api } from "@/lib/api"
 import type { VideoItem, MediaCategory } from "@/lib/types"
 import { appConfirm } from "@/lib/utils"
 import { MediaCard } from "@/components/media-grid/MediaCard"
-import { MediaGrid } from "@/components/media-grid/MediaGrid"
 import { MediaToolbar } from "@/components/media-grid/MediaToolbar"
 import { SelectionBar } from "@/components/media-grid/SelectionBar"
-import { AddMediaModal } from "@/components/media-grid/AddMediaModal"
-import { CategorySidebar } from "@/components/media-grid/CategorySidebar"
+import { FolderExplorer } from "@/components/media-grid/FolderExplorer"
 import { StandaloneVideoPlayer } from "@/components/videos/StandaloneVideoPlayer"
 import { SubtitleWorkspace } from "@/components/subtitle/SubtitleWorkspace"
 
-export default function VideosPage() {
+function VideosPageContent() {
   const { t } = useLocale()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const folderParam = searchParams.get("folder")
+  const currentFolderId: number | null = folderParam ? parseInt(folderParam, 10) : null
+  const navigateToFolder = useCallback((id: number | null) => {
+    const sp = new URLSearchParams(Array.from(searchParams.entries()))
+    if (id === null) sp.delete("folder")
+    else sp.set("folder", String(id))
+    const qs = sp.toString()
+    router.replace(qs ? `/videos?${qs}` : "/videos")
+  }, [router, searchParams])
+
   const [videos, setVideos] = useState<VideoItem[]>([])
   const [categories, setCategories] = useState<MediaCategory[]>([])
   const [loading, setLoading] = useState(true)
-  const [showAddModal, setShowAddModal] = useState(false)
+  const [scanning, setScanning] = useState(false)
   const [playingVideo, setPlayingVideo] = useState<VideoItem | null>(null)
   const [search, setSearch] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<number | null>(null)
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [thumbnailTargetId, setThumbnailTargetId] = useState<number | null>(null)
   const [subtitleVideo, setSubtitleVideo] = useState<VideoItem | null>(null)
   const thumbnailInputRef = useRef<HTMLInputElement>(null)
@@ -52,22 +59,10 @@ export default function VideosPage() {
   useEffect(() => { loadData() }, [loadData])
 
   const filtered = useMemo(() => {
-    let result = videos
-    if (search) {
-      const s = search.toLowerCase()
-      result = result.filter((v) => v.title.toLowerCase().includes(s))
-    }
-    if (categoryFilter !== null) {
-      if (categoryFilter === 0) {
-        result = result.filter((v) => !v.category_id)
-      } else {
-        result = result.filter((v) => v.category_id === categoryFilter)
-      }
-    }
-    return result
-  }, [videos, search, categoryFilter])
-
-  const uncategorizedCount = useMemo(() => videos.filter((v) => !v.category_id).length, [videos])
+    if (!search) return videos
+    const s = search.toLowerCase()
+    return videos.filter((v) => v.title.toLowerCase().includes(s))
+  }, [videos, search])
 
   const handleDelete = async (id: number) => {
     if (!await appConfirm(t("confirmDeleteVideo"))) return
@@ -79,8 +74,35 @@ export default function VideosPage() {
     } catch {}
   }
 
-  const handleAdded = (video: VideoItem) => {
-    setVideos((prev) => [...prev, video as VideoItem])
+  const handleAddFiles = async () => {
+    if (!window.electronAPI?.selectVideoFiles) {
+      alert(t("electronOnlyFeature"))
+      return
+    }
+    const filePaths = await window.electronAPI.selectVideoFiles()
+    if (!filePaths?.length) return
+    setScanning(true)
+    try {
+      const created: VideoItem[] = []
+      for (const filePath of filePaths) {
+        const name = filePath.split(/[\\/]/).pop() || filePath
+        const item = await api.videos.add({
+          title: name,
+          type: "local",
+          source: filePath,
+          category_id: currentFolderId,
+        })
+        created.push(item)
+      }
+      if (created.length > 0) {
+        setVideos((prev) => [...prev, ...created])
+      }
+    } catch (err) {
+      console.error("File add failed:", err)
+      alert(t("folderScanFailed").replace("{error}", err instanceof Error ? err.message : String(err)))
+    } finally {
+      setScanning(false)
+    }
   }
 
   const handleMoveToCategory = async (videoId: number, categoryId: number | null) => {
@@ -112,6 +134,17 @@ export default function VideosPage() {
     } catch {}
   }
 
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    if (!await appConfirm(t("confirmBulkDeleteVideo").replace("{count}", String(ids.length)))) return
+    try {
+      await api.videos.bulkDelete(ids)
+      setVideos((prev) => prev.filter((v) => !ids.includes(v.id)))
+      setSelectedIds(new Set())
+    } catch {}
+  }
+
   const handleDndMoveToCategory = async (itemId: number, categoryId: number | null) => {
     await handleMoveToCategory(itemId, categoryId)
     handleCategoriesRefresh()
@@ -121,7 +154,7 @@ export default function VideosPage() {
     const name = prompt(t("folderName") || "폴더 이름", t("newFolder") || "새 폴더")
     if (!name) return
     try {
-      const cat = await api.categories.create({ name, media_type: "video" })
+      const cat = await api.categories.create({ name, media_type: "video", parent_id: currentFolderId })
       await api.videos.bulkMove([draggedId, targetId], cat.id)
       setVideos((prev) => prev.map((v) =>
         [draggedId, targetId].includes(v.id) ? { ...v, category_id: cat.id } : v
@@ -134,27 +167,37 @@ export default function VideosPage() {
     api.categories.list("video").then(setCategories).catch(() => {})
   }
 
-  const handleCreateCategory = async (name: string) => {
+  const handleCreateFolder = async (name: string, parentId: number | null) => {
     try {
-      await api.categories.create({ name, media_type: "video" })
-      handleCategoriesRefresh()
-    } catch {}
+      await api.categories.create({ name, media_type: "video", parent_id: parentId })
+      const cats = await api.categories.list("video")
+      setCategories(cats)
+    } catch (err) {
+      console.error("Failed to create folder:", err)
+      alert(t("folderCreateFailed").replace("{error}", err instanceof Error ? err.message : String(err)))
+    }
   }
 
-  const handleRenameCategory = async (id: number, name: string) => {
-    try {
-      await api.categories.update(id, { name })
-      handleCategoriesRefresh()
-    } catch {}
-  }
-
-  const handleDeleteCategory = async (id: number) => {
-    if (!await appConfirm(t("confirmDeleteCategory"))) return
-    try {
-      await api.categories.delete(id)
-      if (categoryFilter === id) setCategoryFilter(null)
-      handleCategoriesRefresh()
-    } catch {}
+  const handleFolderContextMenu = async (folderId: number) => {
+    const cat = categories.find((c) => c.id === folderId)
+    if (!cat) return
+    const action = prompt(t("folderActionPrompt").replace("{name}", cat.name), "1")
+    if (action === "1") {
+      const name = prompt(t("newName"), cat.name)
+      if (name && name.trim() && name !== cat.name) {
+        try {
+          await api.categories.update(folderId, { name: name.trim() })
+          handleCategoriesRefresh()
+        } catch {}
+      }
+    } else if (action === "2") {
+      if (!(await appConfirm(t("confirmDeleteCategory")))) return
+      try {
+        await api.categories.delete(folderId)
+        if (currentFolderId === folderId) navigateToFolder(cat.parent_id ?? null)
+        handleCategoriesRefresh()
+      } catch {}
+    }
   }
 
   const handleChangeThumbnail = (id: number) => {
@@ -182,93 +225,105 @@ export default function VideosPage() {
   }
 
   return (
-    <div className="flex-1 flex min-h-0">
-      {/* Sidebar */}
-      <CategorySidebar
-        categories={categories}
-        activeCategory={categoryFilter}
-        onSelect={setCategoryFilter}
-        totalCount={videos.length}
-        uncategorizedCount={uncategorizedCount}
-        onCreateCategory={handleCreateCategory}
-        onRenameCategory={handleRenameCategory}
-        onDeleteCategory={handleDeleteCategory}
-        onMoveItem={handleDndMoveToCategory}
-        collapsed={sidebarCollapsed}
-        t={t}
-      />
+    <div className="flex-1 flex flex-col min-h-0 p-4 gap-3">
+      {/* Toolbar row */}
+      <div className="flex items-center gap-3">
+        <MediaToolbar
+          search={search}
+          onSearchChange={setSearch}
+          onAdd={handleAddFiles}
+          addDisabled={scanning}
+          mediaType="video"
+        />
+      </div>
 
-      {/* Content */}
-      <div className="flex-1 flex flex-col min-h-0 p-4 gap-4">
-        {/* Toolbar row */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="p-1.5 rounded-md text-text-tertiary hover:text-text-primary hover:bg-overlay-4 transition-colors shrink-0"
-            title={sidebarCollapsed ? t("expandSidebar") : t("collapseSidebar")}
-          >
-            {sidebarCollapsed ? <ChevronRightIcon className="size-4" /> : <ChevronLeftIcon className="size-4" />}
-          </button>
-          <MediaToolbar
-            search={search}
-            onSearchChange={setSearch}
-            onAdd={() => setShowAddModal(true)}
-            mediaType="video"
-          />
-        </div>
+      {/* Selection bar */}
+      {selectedIds.size > 0 && (
+        <SelectionBar
+          selectedCount={selectedIds.size}
+          categories={categories}
+          onBulkMove={handleBulkMove}
+          onBulkDelete={handleBulkDelete}
+          onDeselectAll={() => setSelectedIds(new Set())}
+        />
+      )}
 
-        {/* Selection bar */}
-        {selectedIds.size > 0 && (
-          <SelectionBar
-            selectedCount={selectedIds.size}
+      <div className="flex-1 flex flex-col min-h-0">
+        {search ? (
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                <FilmIcon className="size-12 text-text-tertiary opacity-30" />
+                <p className="text-sm text-text-secondary">{t("noResults") || "No results"}</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+                {filtered.map((video) => (
+                  <MediaCard
+                    key={video.id}
+                    id={video.id}
+                    title={video.title}
+                    thumbnail={video.thumbnail || undefined}
+                    mediaType="video"
+                    duration={video.duration}
+                    size={video.size}
+                    categoryId={video.category_id}
+                    categories={categories}
+                    isActive={playingVideo?.id === video.id}
+                    selectable
+                    selected={selectedIds.has(video.id)}
+                    onSelect={(checked) => handleSelect(video.id, checked)}
+                    onClick={() => setPlayingVideo(video)}
+                    onDelete={() => handleDelete(video.id)}
+                    onChangeThumbnail={() => handleChangeThumbnail(video.id)}
+                    onMoveToCategory={(catId) => handleMoveToCategory(video.id, catId)}
+                    onMergeDrop={(draggedId) => handleMergeDrop(video.id, draggedId)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        ) : videos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+            <FilmIcon className="size-12 text-text-tertiary opacity-30" />
+            <p className="text-sm text-text-secondary">{t("noVideos")}</p>
+            <Button variant="secondary" size="sm" onClick={handleAddFiles} disabled={scanning}>
+              {scanning ? <Loader2Icon className="size-4 animate-spin" /> : <PlusIcon className="size-4" />}
+              {t("addFirstVideo")}
+            </Button>
+          </div>
+        ) : (
+          <FolderExplorer<VideoItem>
             categories={categories}
-            onBulkMove={handleBulkMove}
-            onDeselectAll={() => setSelectedIds(new Set())}
+            items={videos}
+            currentFolderId={currentFolderId}
+            onNavigate={navigateToFolder}
+            onCreateFolder={handleCreateFolder}
+            onDropItemToFolder={handleDndMoveToCategory}
+            onFolderContextMenu={(id) => handleFolderContextMenu(id)}
+            renderItem={(video) => (
+              <MediaCard
+                id={video.id}
+                title={video.title}
+                thumbnail={video.thumbnail || undefined}
+                mediaType="video"
+                duration={video.duration}
+                size={video.size}
+                categoryId={video.category_id}
+                categories={categories}
+                isActive={playingVideo?.id === video.id}
+                selectable
+                selected={selectedIds.has(video.id)}
+                onSelect={(checked) => handleSelect(video.id, checked)}
+                onClick={() => setPlayingVideo(video)}
+                onDelete={() => handleDelete(video.id)}
+                onChangeThumbnail={() => handleChangeThumbnail(video.id)}
+                onMoveToCategory={(catId) => handleMoveToCategory(video.id, catId)}
+                onMergeDrop={(draggedId) => handleMergeDrop(video.id, draggedId)}
+              />
+            )}
           />
         )}
-
-        {/* Grid */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
-              <FilmIcon className="size-12 text-text-tertiary opacity-30" />
-              <p className="text-sm text-text-secondary">
-                {videos.length === 0 ? t("noVideos") : t("noResults") || "No results"}
-              </p>
-              {videos.length === 0 && (
-                <Button variant="secondary" size="sm" onClick={() => setShowAddModal(true)}>
-                  <PlusIcon className="size-4" />
-                  {t("addFirstVideo")}
-                </Button>
-              )}
-            </div>
-          ) : (
-            <MediaGrid>
-              {filtered.map((video) => (
-                <MediaCard
-                  key={video.id}
-                  id={video.id}
-                  title={video.title}
-                  thumbnail={video.thumbnail || undefined}
-                  mediaType="video"
-                  duration={video.duration}
-                  size={video.size}
-                  categoryId={video.category_id}
-                  categories={categories}
-                  isActive={playingVideo?.id === video.id}
-                  selectable
-                  selected={selectedIds.has(video.id)}
-                  onSelect={(checked) => handleSelect(video.id, checked)}
-                  onClick={() => setPlayingVideo(video)}
-                  onDelete={() => handleDelete(video.id)}
-                  onChangeThumbnail={() => handleChangeThumbnail(video.id)}
-                  onMoveToCategory={(catId) => handleMoveToCategory(video.id, catId)}
-                  onMergeDrop={(draggedId) => handleMergeDrop(video.id, draggedId)}
-                />
-              ))}
-            </MediaGrid>
-          )}
-        </div>
       </div>
 
       {/* Hidden file input for thumbnail change */}
@@ -299,15 +354,6 @@ export default function VideosPage() {
         </div>
       )}
 
-      {/* Add modal */}
-      {showAddModal && (
-        <AddMediaModal
-          mediaType="video"
-          onClose={() => setShowAddModal(false)}
-          onAdded={handleAdded}
-        />
-      )}
-
       {/* Subtitle workspace */}
       {subtitleVideo && (
         <SubtitleWorkspace
@@ -319,5 +365,13 @@ export default function VideosPage() {
         />
       )}
     </div>
+  )
+}
+
+export default function VideosPage() {
+  return (
+    <Suspense>
+      <VideosPageContent />
+    </Suspense>
   )
 }

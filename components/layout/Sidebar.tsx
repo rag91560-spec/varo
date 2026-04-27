@@ -54,7 +54,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { labelKey: "liveTranslation", href: "/live", icon: ScanEyeIcon },
   { labelKey: "presets", href: "/presets", icon: SlidersHorizontalIcon, group: "tools" },
   { labelKey: "translationMemory", href: "/memory", icon: DatabaseIcon, group: "tools" },
-  { labelKey: "models", href: "/models", icon: BrainCircuitIcon, group: "tools", badge: "예정" },
+  { labelKey: "models", href: "/models", icon: BrainCircuitIcon, group: "tools", badge: "comingSoon" },
   { labelKey: "settings", href: "/settings", icon: SettingsIcon, group: "system" },
   { labelKey: "download", href: "/download", icon: DownloadIcon, group: "system" },
   { labelKey: "admin", href: "/admin", icon: ShieldCheckIcon, group: "system" },
@@ -192,7 +192,7 @@ export function Sidebar() {
         <span className="hidden md:inline">{t(item.labelKey)}</span>
         {item.badge && (
           <span className="hidden md:inline ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/25">
-            {item.badge}
+            {t(item.badge as TranslationKey)}
           </span>
         )}
       </Link>

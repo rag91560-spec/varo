@@ -181,7 +181,7 @@ export function AudioFullscreenPlayer({
   const handleAutoCaption = async () => {
     setAutoCaptioning(true)
     setAutoCaptionProgress(0)
-    setAutoCaptionMsg("시작 중...")
+    setAutoCaptionMsg(t("starting"))
     try {
       const { job_id } = await api.audio.autoCaption(track.id, { source_lang: "ja", target_lang: "ko" })
       const es = new EventSource(api.audio.autoCaptionStatusUrl(job_id))
@@ -201,7 +201,7 @@ export function AudioFullscreenPlayer({
             es.close()
             autoCaptionEsRef.current = null
             setAutoCaptioning(false)
-            setAutoCaptionMsg(msg.data?.error ?? "오류 발생")
+            setAutoCaptionMsg(msg.data?.error ?? t("errorOccurred"))
           }
         } catch {}
       }
@@ -365,7 +365,7 @@ export function AudioFullscreenPlayer({
               {autoCaptioning ? (
                 <>
                   <LoaderIcon className="size-8 text-accent animate-spin" />
-                  <p className="text-sm text-text-secondary">{autoCaptionMsg || "AI 가사 생성 중..."}</p>
+                  <p className="text-sm text-text-secondary">{autoCaptionMsg || t("generatingAiLyrics")}</p>
                   <div className="w-full max-w-xs bg-overlay-6 rounded-full h-1.5 overflow-hidden">
                     <div
                       className="h-full bg-accent transition-all duration-300 rounded-full"
@@ -383,7 +383,7 @@ export function AudioFullscreenPlayer({
                     className="flex items-center gap-2 px-5 py-2.5 text-sm bg-accent text-white rounded-xl hover:brightness-110 transition-all active:scale-95 shadow-md"
                   >
                     <SparklesIcon className="size-4" />
-                    AI 가사 생성
+                    {t("generateAiLyrics")}
                   </button>
                   <div className="flex gap-2">
                     <button

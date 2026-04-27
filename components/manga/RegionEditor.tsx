@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react"
 import { Loader2Icon, Trash2Icon, CheckIcon, XIcon, RefreshCwIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { api } from "@/lib/api"
+import { useLocale } from "@/hooks/use-locale"
 import type { MangaTranslationEntry } from "@/lib/types"
 
 interface RegionEditorProps {
@@ -24,6 +25,7 @@ interface DraftRegion {
 const COLORS = ["#3b82f6","#10b981","#ef4444","#f59e0b","#8b5cf6","#ec4899"]
 
 export function RegionEditor({ mangaId, page, entries, onChange }: RegionEditorProps) {
+  const { t } = useLocale()
   const containerRef = useRef<HTMLDivElement>(null)
   const [draft, setDraft] = useState<DraftRegion | null>(null)
   const [drawStart, setDrawStart] = useState<{ x: number; y: number } | null>(null)
@@ -89,7 +91,7 @@ export function RegionEditor({ mangaId, page, entries, onChange }: RegionEditorP
       setDraft(prev => prev ? {
         ...prev,
         status: "error",
-        error: e instanceof Error ? e.message : "번역 실패",
+        error: e instanceof Error ? e.message : t("translationFailed"),
       } : null)
     }
   }, [draft, drawStart, mangaId, page, entries, onChange])
@@ -120,7 +122,7 @@ export function RegionEditor({ mangaId, page, entries, onChange }: RegionEditorP
       {/* Hint */}
       <div className="absolute top-2 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
         <div className="px-3 py-1.5 rounded-full bg-black/70 backdrop-blur-sm text-white text-[11px] font-medium">
-          말풍선 위에 드래그 → 자동 번역
+          {t("dragToAutoTranslate")}
         </div>
       </div>
 
@@ -169,7 +171,7 @@ export function RegionEditor({ mangaId, page, entries, onChange }: RegionEditorP
                 onMouseDown={e => e.stopPropagation()}
               >
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-semibold text-text-primary">영역 {i + 1}</span>
+                  <span className="text-[11px] font-semibold text-text-primary">{t("region")} {i + 1}</span>
                   <button onClick={() => deleteEntry(i)} className="text-destructive hover:opacity-70">
                     <Trash2Icon className="size-3.5" />
                   </button>
@@ -210,7 +212,7 @@ export function RegionEditor({ mangaId, page, entries, onChange }: RegionEditorP
               <p className="text-[10px] text-destructive mb-1.5">{draft.error}</p>
               <div className="flex gap-1">
                 <button onClick={retryDraft} className="flex-1 flex items-center justify-center gap-1 text-[11px] px-2 py-1 rounded bg-surface-2 hover:bg-surface-3 text-text-secondary">
-                  <RefreshCwIcon className="size-3" /> 재시도
+                  <RefreshCwIcon className="size-3" /> {t("retry")}
                 </button>
                 <button onClick={() => setDraft(null)} className="px-2 py-1 text-[11px] text-text-secondary hover:text-text-primary">
                   <XIcon className="size-3" />
