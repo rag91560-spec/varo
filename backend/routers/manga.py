@@ -43,6 +43,10 @@ class BulkMoveRequest(BaseModel):
     category_id: int | None = None
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: list[int]
+
+
 class TranslatePageRequest(BaseModel):
     page: int
     model: str = "gemini-2.0-flash"
@@ -104,6 +108,20 @@ async def bulk_move_manga(body: BulkMoveRequest):
         raise HTTPException(400, "ids must not be empty")
     await db.bulk_move_manga(body.ids, body.category_id)
     return {"ok": True, "moved": len(body.ids)}
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_manga(body: BulkDeleteRequest):
+    if not body.ids:
+        raise HTTPException(400, "ids must not be empty")
+    deleted = 0
+    for mid in body.ids:
+        manga = await db.get_manga(mid)
+        if manga:
+            delete_manga_files(mid)
+            await db.delete_manga(mid)
+            deleted += 1
+    return {"ok": True, "deleted": deleted}
 
 
 @router.put("/{manga_id}")

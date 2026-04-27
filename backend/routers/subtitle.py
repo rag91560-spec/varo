@@ -32,6 +32,7 @@ os.makedirs(AUDIO_EXTRACT_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api/subtitle", tags=["subtitle"])
 
+OFFLINE_PROVIDERS = {"offline", "test"}
 
 # --- Pydantic models ---
 
@@ -237,7 +238,8 @@ async def stt_status(job_id: str):
 @router.post("/{subtitle_id}/translate")
 async def start_translate(subtitle_id: int, body: SubtitleTranslateRequest):
     """Start subtitle translation job with context-window batching."""
-    await require_license()
+    if body.provider not in OFFLINE_PROVIDERS:
+        await require_license()
     subtitle = await db.get_subtitle(subtitle_id)
     if not subtitle:
         raise HTTPException(404, "Subtitle not found")

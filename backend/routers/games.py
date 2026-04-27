@@ -21,10 +21,12 @@ from .. import structure_parser
 # ── Folder models ──
 class FolderCreate(_PydanticBase):
     name: str
+    parent_id: int | None = None
 
 class FolderUpdate(_PydanticBase):
     name: str | None = None
     sort_order: int | None = None
+    parent_id: int | None = None
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +61,7 @@ async def list_folders():
 async def create_folder(body: FolderCreate):
     if not body.name.strip():
         raise HTTPException(400, "Folder name cannot be empty")
-    return await db.create_folder(body.name.strip())
+    return await db.create_folder(body.name.strip(), parent_id=body.parent_id)
 
 
 @folder_router.put("/{folder_id}")
@@ -67,9 +69,12 @@ async def update_folder(folder_id: int, body: FolderUpdate):
     folder = await db.get_folder(folder_id)
     if not folder:
         raise HTTPException(404, "Folder not found")
-    fields = body.model_dump(exclude_none=True)
+    fields = body.model_dump(exclude_unset=True)
     if "name" in fields:
-        fields["name"] = fields["name"].strip()
+        name = (fields["name"] or "").strip()
+        if not name:
+            raise HTTPException(400, "Folder name cannot be empty")
+        fields["name"] = name
     return await db.update_folder(folder_id, **fields)
 
 

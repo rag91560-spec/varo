@@ -31,6 +31,24 @@ def _find_ffmpeg(name: str = "ffmpeg") -> str | None:
     return None
 
 
+def probe_media_duration(media_path: str) -> float:
+    """Return media duration in seconds via ffprobe, or 0.0 on failure."""
+    ffprobe = _find_ffmpeg("ffprobe")
+    if not ffprobe or not os.path.isfile(media_path):
+        return 0.0
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", media_path],
+            capture_output=True, text=True, timeout=15,
+        )
+        out = result.stdout.strip()
+        return float(out) if out else 0.0
+    except Exception as e:
+        logger.warning("probe_media_duration failed for %s: %s", media_path, e)
+        return 0.0
+
+
 def extract_sample_frames(video_path: str, count: int = 6) -> list[bytes]:
     """Extract N evenly-spaced frames from a video as JPEG bytes (720px width).
 

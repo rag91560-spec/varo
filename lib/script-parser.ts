@@ -46,6 +46,47 @@ export function parseSRT(raw: string): ScriptCue[] {
   return cues
 }
 
+const LRC_META_RE = /^\[(ar|ti|al|by|offset|length|re|ve|au|la):/i
+const LRC_LINE_RE = /\[(\d+):(\d+)(?:[.:](\d+))?\]/g
+
+export function parseLRC(raw: string): ScriptCue[] {
+  const content = raw.trim().replace(/\r\n/g, "\n")
+  const entries: { start: number; text: string }[] = []
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (LRC_META_RE.test(trimmed)) continue
+    // Collect all timestamps at the start of the line
+    const stamps: number[] = []
+    let match: RegExpExecArray | null
+    LRC_LINE_RE.lastIndex = 0
+    let lastEnd = 0
+    while ((match = LRC_LINE_RE.exec(trimmed)) !== null) {
+      if (match.index !== lastEnd) break // stamps must be at the start / contiguous
+      const mm = parseInt(match[1], 10)
+      const ss = parseInt(match[2], 10)
+      const frac = match[3] ? parseInt(match[3], 10) : 0
+      // .xx (centiseconds) or .xxx (milliseconds)
+      const fracMs = match[3] && match[3].length >= 3 ? frac : frac * 10
+      stamps.push(mm * 60 + ss + fracMs / 1000)
+      lastEnd = match.index + match[0].length
+    }
+    if (stamps.length === 0) continue
+    const text = trimmed.slice(lastEnd).trim()
+    for (const start of stamps) {
+      entries.push({ start, text })
+    }
+  }
+  entries.sort((a, b) => a.start - b.start)
+  const cues: ScriptCue[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const start = entries[i].start
+    const end = i + 1 < entries.length ? entries[i + 1].start : start + 5
+    cues.push({ index: i, startTime: start, endTime: end, text: entries[i].text })
+  }
+  return cues
+}
+
 export function parseVTT(raw: string): ScriptCue[] {
   const cues: ScriptCue[] = []
   const content = raw.trim().replace(/\r\n/g, "\n")
@@ -80,6 +121,12 @@ export function parseScript(raw: string): ScriptData {
   const firstBlock = trimmed.split(/\n\n/)[0]
   if (firstBlock && /-->/m.test(firstBlock)) {
     const cues = parseSRT(trimmed)
+    if (cues.length > 0) return { type: "timed", cues }
+  }
+
+  // LRC detection: [mm:ss.xx]text
+  if (/^\s*\[\d+:\d+/m.test(trimmed)) {
+    const cues = parseLRC(trimmed)
     if (cues.length > 0) return { type: "timed", cues }
   }
 

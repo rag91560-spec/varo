@@ -16,6 +16,7 @@ from typing import Optional, List
 from .. import db
 from ..sse_utils import sse_format as _sse_format
 from .. import video_job_manager
+from ..video_analyzer import probe_media_duration
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,101 @@ class DownloadUrlRequest(BaseModel):
 class BulkMoveRequest(BaseModel):
     ids: List[int]
     category_id: Optional[int] = None
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[int]
+
+
+class ScanFolderRequest(BaseModel):
+    path: str
+    category_id: Optional[int] = None  # legacy: assign everything to one category
+    parent_category_id: Optional[int] = None  # new: where to root the scanned tree
+    preserve_structure: bool = True  # if True, create sub-categories mirroring folders
+
+
+_VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".avi", ".mov", ".m4v", ".ts", ".mpg", ".mpeg", ".wmv", ".flv"}
+
+
+@router.post("/scan-folder")
+async def scan_folder(body: ScanFolderRequest):
+    folder = os.path.abspath(body.path)
+    if not os.path.isdir(folder):
+        raise HTTPException(400, f"Directory not found: {folder}")
+
+    video_files: list[str] = []
+    for root, _dirs, files in os.walk(folder):
+        for fname in sorted(files):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in _VIDEO_EXTS:
+                video_files.append(os.path.join(root, fname))
+    if not video_files:
+        raise HTTPException(400, "No video files found in folder")
+
+    created: list[dict] = []
+    created_categories: list[dict] = []
+    category_cache: dict[tuple, int] = {}
+
+    base_parent_id = body.parent_category_id
+    flat_category_id = None
+    if body.category_id is not None and body.parent_category_id is None:
+        flat_category_id = body.category_id
+
+    scan_root_name = os.path.basename(folder.rstrip("\\/")) or folder
+
+    for vf in video_files:
+        abs_vf = os.path.abspath(vf)
+        fname = os.path.basename(abs_vf)
+        title = os.path.splitext(fname)[0]
+        size = os.path.getsize(abs_vf)
+
+        target_category_id: Optional[int] = None
+        if flat_category_id is not None:
+            target_category_id = flat_category_id
+        elif body.preserve_structure:
+            rel_dir = os.path.relpath(os.path.dirname(abs_vf), folder)
+            segments = [scan_root_name]
+            if rel_dir and rel_dir != ".":
+                segments.extend([s for s in rel_dir.replace("\\", "/").split("/") if s and s != "."])
+            cache_key = (base_parent_id,) + tuple(segments)
+            if cache_key in category_cache:
+                target_category_id = category_cache[cache_key]
+            else:
+                leaf = await db.get_or_create_category_by_path(
+                    media_type="video",
+                    segments=segments,
+                    root_parent_id=base_parent_id,
+                )
+                if leaf:
+                    target_category_id = leaf["id"]
+                    category_cache[cache_key] = leaf["id"]
+                    if leaf not in created_categories:
+                        created_categories.append(leaf)
+        else:
+            target_category_id = base_parent_id
+
+        duration = probe_media_duration(abs_vf)
+        video = await db.create_video(
+            title=title,
+            type_="local",
+            source=abs_vf,
+            thumbnail="",
+            duration=duration,
+            size=size,
+            category_id=target_category_id,
+            sort_order=len(created),
+        )
+        # Auto-extract thumbnail
+        thumb_url = _extract_video_thumbnail(abs_vf, video["id"])
+        if thumb_url:
+            video = await db.update_video(video["id"], thumbnail=thumb_url)
+        created.append(video)
+
+    return {
+        "created_items": created,
+        "created_categories": created_categories,
+        "total": len(created),
+    }
 
 
 @router.post("/download-url")
@@ -144,6 +240,17 @@ async def bulk_move_videos(body: BulkMoveRequest):
     return {"ok": True, "moved": len(body.ids)}
 
 
+@router.post("/bulk-delete")
+async def bulk_delete_videos(body: BulkDeleteRequest):
+    if not body.ids:
+        raise HTTPException(400, "ids must not be empty")
+    deleted = 0
+    for vid in body.ids:
+        if await db.delete_video(vid):
+            deleted += 1
+    return {"ok": True, "deleted": deleted}
+
+
 @router.get("")
 async def list_videos():
     return await db.list_videos()
@@ -190,17 +297,18 @@ async def upload_video(file: UploadFile = File(...)):
     with open(dest, "wb") as f:
         f.write(content)
     title = os.path.splitext(file.filename or "video")[0]
+    abs_dest = os.path.abspath(dest)
     video = await db.create_video(
         title=title,
         type_="local",
-        source=os.path.abspath(dest),
+        source=abs_dest,
         thumbnail="",
-        duration=0,
+        duration=probe_media_duration(abs_dest),
         size=len(content),
         sort_order=0,
     )
     # Auto-extract thumbnail
-    thumb_url = _extract_video_thumbnail(os.path.abspath(dest), video["id"])
+    thumb_url = _extract_video_thumbnail(abs_dest, video["id"])
     if thumb_url:
         video = await db.update_video(video["id"], thumbnail=thumb_url)
     return video

@@ -301,6 +301,7 @@ CREATE TABLE IF NOT EXISTS folders (
     sort_order INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
 );
+ALTER TABLE folders ADD COLUMN parent_id INTEGER DEFAULT NULL;
 ALTER TABLE games ADD COLUMN folder_id INTEGER DEFAULT NULL;
 CREATE TABLE IF NOT EXISTS subtitles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -373,6 +374,9 @@ CREATE TABLE IF NOT EXISTS subtitle_glossary (
     UNIQUE(subtitle_id, source)
 );
 CREATE INDEX IF NOT EXISTS idx_subtitle_glossary_sub ON subtitle_glossary(subtitle_id);
+ALTER TABLE media_categories ADD COLUMN glossary_json TEXT DEFAULT '{}';
+ALTER TABLE media_categories ADD COLUMN parent_id INTEGER DEFAULT NULL;
+CREATE INDEX IF NOT EXISTS idx_media_categories_parent ON media_categories(media_type, parent_id);
 """
 
 
@@ -1125,7 +1129,7 @@ _SUBTITLE_JOB_COLUMNS = frozenset({
 })
 
 _CATEGORY_COLUMNS = frozenset({
-    "name", "media_type", "sort_order", "updated_at",
+    "name", "media_type", "sort_order", "updated_at", "glossary_json", "parent_id",
 })
 
 
@@ -1421,17 +1425,100 @@ async def get_category(cat_id: int) -> Optional[dict]:
         return dict(rows[0]) if rows else None
 
 
-async def create_category(name: str, media_type: str, sort_order: int = 0) -> dict:
+async def create_category(name: str, media_type: str, sort_order: int = 0,
+                           parent_id: Optional[int] = None) -> dict:
     now = _now()
     async with get_db() as db:
         cursor = await db.execute(
-            """INSERT INTO media_categories (name, media_type, sort_order, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?)""",
-            (name, media_type, sort_order, now, now),
+            """INSERT INTO media_categories (name, media_type, sort_order, parent_id, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (name, media_type, sort_order, parent_id, now, now),
         )
         await db.commit()
         cat_id = cursor.lastrowid
     return await get_category(cat_id)
+
+
+async def get_or_create_category_by_path(
+    media_type: str,
+    segments: list[str],
+    root_parent_id: Optional[int] = None,
+) -> Optional[dict]:
+    """Walk `segments` as a folder path under `root_parent_id`, creating categories as needed.
+
+    Returns the leaf category dict. Empty segments → returns None.
+    Idempotent: repeating the same path returns the existing leaf without duplicating.
+    """
+    if not segments:
+        return None
+    parent_id = root_parent_id
+    leaf: Optional[dict] = None
+    async with get_db() as db:
+        for seg in segments:
+            name = seg.strip()
+            if not name:
+                continue
+            if parent_id is None:
+                rows = await db.execute_fetchall(
+                    "SELECT * FROM media_categories WHERE media_type = ? AND parent_id IS NULL AND name = ? LIMIT 1",
+                    (media_type, name),
+                )
+            else:
+                rows = await db.execute_fetchall(
+                    "SELECT * FROM media_categories WHERE media_type = ? AND parent_id = ? AND name = ? LIMIT 1",
+                    (media_type, parent_id, name),
+                )
+            if rows:
+                leaf = dict(rows[0])
+            else:
+                now = _now()
+                cursor = await db.execute(
+                    """INSERT INTO media_categories (name, media_type, sort_order, parent_id, created_at, updated_at)
+                       VALUES (?, ?, 0, ?, ?, ?)""",
+                    (name, media_type, parent_id, now, now),
+                )
+                await db.commit()
+                new_id = cursor.lastrowid
+                rows = await db.execute_fetchall(
+                    "SELECT * FROM media_categories WHERE id = ?", (new_id,)
+                )
+                leaf = dict(rows[0]) if rows else None
+            parent_id = leaf["id"] if leaf else parent_id
+    return leaf
+
+
+async def list_category_descendants(cat_id: int) -> list[int]:
+    """Return [cat_id, ...all descendant ids] via recursive CTE."""
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            """WITH RECURSIVE descendants(id) AS (
+                   SELECT id FROM media_categories WHERE id = ?
+                   UNION ALL
+                   SELECT c.id FROM media_categories c
+                   INNER JOIN descendants d ON c.parent_id = d.id
+               )
+               SELECT id FROM descendants""",
+            (cat_id,),
+        )
+        return [r["id"] for r in rows]
+
+
+async def get_category_ancestors(cat_id: int) -> list[dict]:
+    """Return ancestor chain from root to cat_id (inclusive)."""
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            """WITH RECURSIVE ancestors(id, name, media_type, parent_id, depth) AS (
+                   SELECT id, name, media_type, parent_id, 0
+                   FROM media_categories WHERE id = ?
+                   UNION ALL
+                   SELECT c.id, c.name, c.media_type, c.parent_id, a.depth + 1
+                   FROM media_categories c
+                   INNER JOIN ancestors a ON c.id = a.parent_id
+               )
+               SELECT id, name, media_type, parent_id FROM ancestors ORDER BY depth DESC""",
+            (cat_id,),
+        )
+        return [dict(r) for r in rows]
 
 
 async def update_category(cat_id: int, **fields) -> Optional[dict]:
@@ -1450,10 +1537,77 @@ async def update_category(cat_id: int, **fields) -> Optional[dict]:
 
 
 async def delete_category(cat_id: int) -> bool:
+    """Delete a category and all descendants. Items in any of them become uncategorized."""
+    descendant_ids = await list_category_descendants(cat_id)
+    if not descendant_ids:
+        return False
     async with get_db() as db:
-        cursor = await db.execute("DELETE FROM media_categories WHERE id = ?", (cat_id,))
+        placeholders = ",".join("?" * len(descendant_ids))
+        # Clear items in all affected categories
+        await db.execute(
+            f"UPDATE videos SET category_id = NULL WHERE category_id IN ({placeholders})",
+            descendant_ids,
+        )
+        await db.execute(
+            f"UPDATE audio_items SET category_id = NULL WHERE category_id IN ({placeholders})",
+            descendant_ids,
+        )
+        await db.execute(
+            f"UPDATE manga SET category_id = NULL WHERE category_id IN ({placeholders})",
+            descendant_ids,
+        )
+        cursor = await db.execute(
+            f"DELETE FROM media_categories WHERE id IN ({placeholders})",
+            descendant_ids,
+        )
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def list_child_categories(media_type: str, parent_id: Optional[int]) -> list[dict]:
+    """Direct children of the given parent (NULL = root) for a media_type."""
+    async with get_db() as db:
+        if parent_id is None:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM media_categories WHERE media_type = ? AND parent_id IS NULL ORDER BY sort_order ASC, name ASC",
+                (media_type,),
+            )
+        else:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM media_categories WHERE media_type = ? AND parent_id = ? ORDER BY sort_order ASC, name ASC",
+                (media_type, parent_id),
+            )
+        return [dict(r) for r in rows]
+
+
+async def list_audio_items_by_category(category_id: Optional[int]) -> list[dict]:
+    """Direct items in a category (NULL = uncategorized/root)."""
+    async with get_db() as db:
+        if category_id is None:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM audio_items WHERE category_id IS NULL ORDER BY sort_order ASC, created_at DESC"
+            )
+        else:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM audio_items WHERE category_id = ? ORDER BY sort_order ASC, created_at DESC",
+                (category_id,),
+            )
+        return [dict(r) for r in rows]
+
+
+async def list_videos_by_category(category_id: Optional[int]) -> list[dict]:
+    """Direct videos in a category (NULL = uncategorized/root)."""
+    async with get_db() as db:
+        if category_id is None:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM videos WHERE category_id IS NULL ORDER BY sort_order ASC, created_at DESC"
+            )
+        else:
+            rows = await db.execute_fetchall(
+                "SELECT * FROM videos WHERE category_id = ? ORDER BY sort_order ASC, created_at DESC",
+                (category_id,),
+            )
+        return [dict(r) for r in rows]
 
 
 async def clear_category_from_items(cat_id: int):
@@ -1463,6 +1617,45 @@ async def clear_category_from_items(cat_id: int):
         await db.execute("UPDATE audio_items SET category_id = NULL WHERE category_id = ?", (cat_id,))
         await db.execute("UPDATE manga SET category_id = NULL WHERE category_id = ?", (cat_id,))
         await db.commit()
+
+
+# --- Category Glossary ---
+
+async def get_category_glossary(category_id: int) -> dict[str, str]:
+    """Return the glossary dict for a category (empty if none)."""
+    async with get_db() as db:
+        rows = await db.execute_fetchall(
+            "SELECT glossary_json FROM media_categories WHERE id = ?", (category_id,)
+        )
+        if not rows:
+            return {}
+        raw = rows[0]["glossary_json"] or "{}"
+        try:
+            data = json.loads(raw)
+            return data if isinstance(data, dict) else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+
+async def set_category_glossary(category_id: int, glossary: dict) -> None:
+    """Replace the full glossary for a category."""
+    payload = json.dumps(glossary or {}, ensure_ascii=False)
+    now = _now()
+    async with get_db() as db:
+        await db.execute(
+            "UPDATE media_categories SET glossary_json = ?, updated_at = ? WHERE id = ?",
+            (payload, now, category_id),
+        )
+        await db.commit()
+
+
+async def upsert_category_glossary_terms(category_id: int, terms: dict) -> dict[str, str]:
+    """Merge `terms` into the existing category glossary and return the merged dict."""
+    current = await get_category_glossary(category_id)
+    if terms:
+        current.update({str(k): str(v) for k, v in terms.items()})
+    await set_category_glossary(category_id, current)
+    return current
 
 
 async def bulk_move_videos(video_ids: list[int], category_id: int | None):
@@ -1508,7 +1701,7 @@ async def count_items_by_category(media_type: str) -> dict[int | None, int]:
 
 # --- Game Folders ---
 
-_FOLDER_COLUMNS = frozenset({"name", "sort_order"})
+_FOLDER_COLUMNS = frozenset({"name", "sort_order", "parent_id"})
 
 
 async def list_folders() -> list[dict]:
@@ -1527,12 +1720,12 @@ async def get_folder(folder_id: int) -> Optional[dict]:
         return dict(rows[0]) if rows else None
 
 
-async def create_folder(name: str) -> dict:
+async def create_folder(name: str, parent_id: Optional[int] = None) -> dict:
     now = _now()
     async with get_db() as db:
         cursor = await db.execute(
-            "INSERT INTO folders (name, sort_order, created_at) VALUES (?, 0, ?)",
-            (name, now),
+            "INSERT INTO folders (name, parent_id, sort_order, created_at) VALUES (?, ?, 0, ?)",
+            (name, parent_id, now),
         )
         await db.commit()
         folder_id = cursor.lastrowid
@@ -1555,9 +1748,21 @@ async def update_folder(folder_id: int, **fields) -> Optional[dict]:
 
 async def delete_folder(folder_id: int) -> bool:
     async with get_db() as db:
+        # Look up parent so child folders can inherit it
+        rows = await db.execute_fetchall(
+            "SELECT parent_id FROM folders WHERE id = ?", (folder_id,)
+        )
+        if not rows:
+            return False
+        parent_id = rows[0]["parent_id"]
         # Reset games in this folder
         await db.execute(
             "UPDATE games SET folder_id = NULL WHERE folder_id = ?", (folder_id,)
+        )
+        # Reparent any child folders to the deleted folder's parent
+        await db.execute(
+            "UPDATE folders SET parent_id = ? WHERE parent_id = ?",
+            (parent_id, folder_id),
         )
         cursor = await db.execute("DELETE FROM folders WHERE id = ?", (folder_id,))
         await db.commit()

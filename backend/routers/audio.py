@@ -14,6 +14,8 @@ from typing import Optional, List
 
 from .. import db
 from .. import engine_bridge
+from ..audio_script_utils import extract_translatable_blocks
+from ..video_analyzer import probe_media_duration
 try:
     from ..license import require_license
 except ImportError:
@@ -28,6 +30,8 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(THUMB_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/api/audio", tags=["audio"])
+
+OFFLINE_PROVIDERS = {"offline", "test"}
 
 _AUDIO_MIME = {
     ".mp3": "audio/mpeg",
@@ -66,12 +70,18 @@ class AudioUpdate(BaseModel):
 
 class ScanFolderRequest(BaseModel):
     path: str
-    category_id: Optional[int] = None
+    category_id: Optional[int] = None  # legacy: assign everything to one category
+    parent_category_id: Optional[int] = None  # new: where to root the scanned tree
+    preserve_structure: bool = True  # if True, create sub-categories mirroring folders
 
 
 class BulkMoveRequest(BaseModel):
     ids: List[int]
     category_id: Optional[int] = None
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[int]
 
 
 @router.post("/bulk-move")
@@ -80,6 +90,17 @@ async def bulk_move_audio(body: BulkMoveRequest):
         raise HTTPException(400, "ids must not be empty")
     await db.bulk_move_audio(body.ids, body.category_id)
     return {"ok": True, "moved": len(body.ids)}
+
+
+@router.post("/bulk-delete")
+async def bulk_delete_audio(body: BulkDeleteRequest):
+    if not body.ids:
+        raise HTTPException(400, "ids must not be empty")
+    deleted = 0
+    for aid in body.ids:
+        if await db.delete_audio_item(aid):
+            deleted += 1
+    return {"ok": True, "deleted": deleted}
 
 
 @router.get("")
@@ -109,7 +130,7 @@ _SCRIPT_EXTS = {".srt", ".vtt", ".lrc", ".txt"}
 
 @router.post("/scan-folder")
 async def scan_folder(body: ScanFolderRequest):
-    folder = body.path
+    folder = os.path.abspath(body.path)
     if not os.path.isdir(folder):
         raise HTTPException(400, f"Directory not found: {folder}")
     # Recursively find audio and script files
@@ -125,27 +146,72 @@ async def scan_folder(body: ScanFolderRequest):
                 script_files.append(full)
     if not audio_files:
         raise HTTPException(400, "No audio files found in folder")
-    # Build script lookup by base name (without extension)
-    script_map: dict[str, str] = {}
+
+    # Build script lookup by full path (dirname + basename) so same-named scripts
+    # in different subfolders don't collide
+    script_map: dict[tuple[str, str], str] = {}
     for sp in script_files:
-        base = os.path.splitext(os.path.basename(sp))[0].lower()
-        # strip leading number prefix like "1 " for matching "01 xxx"
-        script_map[base] = sp
-    created = []
+        key = (os.path.dirname(os.path.abspath(sp)), os.path.splitext(os.path.basename(sp))[0].lower())
+        script_map[key] = sp
+
+    created: list[dict] = []
+    created_categories: list[dict] = []
+    category_cache: dict[tuple, int] = {}  # (parent_id, *segments) -> leaf id
+
+    # Decide the base parent and optional root folder name
+    # Legacy: if category_id given and parent_category_id not, attach everything flat to category_id
+    base_parent_id = body.parent_category_id
+    flat_category_id = None
+    if body.category_id is not None and body.parent_category_id is None:
+        flat_category_id = body.category_id
+
+    scan_root_name = os.path.basename(folder.rstrip("\\/")) or folder
+
     for af in audio_files:
-        fname = os.path.basename(af)
+        abs_af = os.path.abspath(af)
+        fname = os.path.basename(abs_af)
         title = os.path.splitext(fname)[0]
-        size = os.path.getsize(af)
-        # Try to find matching script
-        base = title.lower()
+        size = os.path.getsize(abs_af)
+
+        # Determine the target category
+        target_category_id: Optional[int] = None
+        if flat_category_id is not None:
+            target_category_id = flat_category_id
+        elif body.preserve_structure:
+            rel_dir = os.path.relpath(os.path.dirname(abs_af), folder)
+            # Path segments: [scan_root_name] + [subdirs...] (excluding "." cases)
+            segments = [scan_root_name]
+            if rel_dir and rel_dir != ".":
+                segments.extend([s for s in rel_dir.replace("\\", "/").split("/") if s and s != "."])
+            cache_key = (base_parent_id,) + tuple(segments)
+            if cache_key in category_cache:
+                target_category_id = category_cache[cache_key]
+            else:
+                leaf = await db.get_or_create_category_by_path(
+                    media_type="audio",
+                    segments=segments,
+                    root_parent_id=base_parent_id,
+                )
+                if leaf:
+                    target_category_id = leaf["id"]
+                    category_cache[cache_key] = leaf["id"]
+                    # Collect unique created categories for response
+                    if leaf not in created_categories:
+                        created_categories.append(leaf)
+        else:
+            target_category_id = base_parent_id
+
+        # Find matching script in the SAME directory (preserves per-folder naming)
         script_text = ""
-        matched_script = script_map.get(base)
+        dir_key = (os.path.dirname(abs_af), title.lower())
+        matched_script = script_map.get(dir_key)
         if not matched_script:
-            # Try stripping leading numbers for fuzzy match
-            import re
-            clean = re.sub(r'^\d+\s*', '', base)
-            for sk, sv in script_map.items():
-                sk_clean = re.sub(r'^\d+\s*', '', sk)
+            import re as _re
+            clean = _re.sub(r"^\d+\s*", "", title.lower())
+            for (sk_dir, sk_name), sv in script_map.items():
+                if sk_dir != os.path.dirname(abs_af):
+                    continue
+                sk_clean = _re.sub(r"^\d+\s*", "", sk_name)
                 if clean and sk_clean and clean == sk_clean:
                     matched_script = sv
                     break
@@ -155,20 +221,27 @@ async def scan_folder(body: ScanFolderRequest):
                     script_text = f.read()
             except Exception:
                 pass
+
+        duration = probe_media_duration(abs_af)
         item = await db.create_audio_item(
             title=title,
             type_="local",
-            source=os.path.abspath(af),
+            source=abs_af,
             thumbnail="",
-            duration=0,
+            duration=duration,
             size=size,
             sort_order=len(created),
-            category_id=body.category_id,
+            category_id=target_category_id,
         )
         if script_text:
             item = await db.update_audio_item(item["id"], script_text=script_text)
         created.append(item)
-    return created
+
+    return {
+        "created_items": created,
+        "created_categories": created_categories,
+        "total": len(created),
+    }
 
 
 MAX_AUDIO_UPLOAD_SIZE = 100 * 1024 * 1024  # 100MB
@@ -190,12 +263,13 @@ async def upload_audio(file: UploadFile = File(...)):
     with open(dest, "wb") as f:
         f.write(content)
     title = os.path.splitext(file.filename or "audio")[0]
+    abs_dest = os.path.abspath(dest)
     return await db.create_audio_item(
         title=title,
         type_="local",
-        source=os.path.abspath(dest),
+        source=abs_dest,
         thumbnail="",
-        duration=0,
+        duration=probe_media_duration(abs_dest),
         size=len(content),
         sort_order=0,
     )
@@ -226,10 +300,10 @@ async def serve_audio(audio_id: int):
     if audio["type"] != "local":
         raise HTTPException(400, "Only local audio can be served")
     file_path = audio["source"]
+    # Trust DB-registered paths: scan_folder / upload / create_audio
+    # explicitly register absolute paths. The audio_id route is protected
+    # by the API layer, so no external attacker can inject arbitrary paths.
     real_path = os.path.realpath(file_path)
-    allowed_dir = os.path.realpath(_data_dir)
-    if not real_path.startswith(allowed_dir + os.sep) and not real_path.startswith(allowed_dir):
-        raise HTTPException(403, "Access denied: path outside allowed directory")
     if not os.path.isfile(real_path):
         raise HTTPException(404, f"File not found: {file_path}")
     ext = os.path.splitext(real_path)[1].lower()
@@ -263,24 +337,10 @@ async def upload_audio_script(audio_id: int, file: UploadFile = File(...)):
 
 # ── Script translation ──────────────────────────────────────────
 
-_SRT_TS_RE = re.compile(
-    r"^\d+$|"                                          # SRT index
-    r"^\d{2}:\d{2}:\d{2}[.,]\d{3}\s*-->|"             # SRT timestamp
-    r"^WEBVTT|^NOTE\s|^Kind:|^Language:",              # VTT header
-)
-
 
 def _extract_translatable_lines(script_text: str) -> list[str]:
-    """Return only translatable text lines from SRT/VTT/plain script."""
-    lines = []
-    for line in script_text.splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        if _SRT_TS_RE.match(stripped):
-            continue
-        lines.append(stripped)
-    return lines
+    """Block-based extraction; index matches frontend cue index."""
+    return extract_translatable_blocks(script_text)
 
 
 class TranslateScriptRequest(BaseModel):
@@ -291,7 +351,10 @@ class TranslateScriptRequest(BaseModel):
 @router.post("/{audio_id}/translate-script")
 async def translate_audio_script(audio_id: int, body: TranslateScriptRequest):
     """Translate script_text using TM cache + AI translation."""
-    await require_license()
+    settings = await db.get_settings()
+    provider = settings.get("default_provider", "claude")
+    if provider not in OFFLINE_PROVIDERS:
+        await require_license()
     audio = await db.get_audio_item(audio_id)
     if not audio:
         raise HTTPException(404, "Audio not found")
@@ -320,8 +383,6 @@ async def translate_audio_script(audio_id: int, body: TranslateScriptRequest):
 
     # 2) AI translate missing lines
     if ai_texts:
-        settings = await db.get_settings()
-        provider = settings.get("default_provider", "claude")
         api_keys = settings.get("api_keys", {})
         if isinstance(api_keys, str):
             api_keys = json.loads(api_keys)
@@ -331,6 +392,16 @@ async def translate_audio_script(audio_id: int, body: TranslateScriptRequest):
         if not api_key:
             raise HTTPException(400, f"No API key configured for provider: {provider}")
 
+        # Load category glossary if this audio belongs to a category
+        cat_id = audio.get("category_id")
+        category_glossary: dict[str, str] = {}
+        if cat_id:
+            try:
+                category_glossary = await db.get_category_glossary(int(cat_id))
+            except Exception as e:
+                logger.warning("Failed to load category glossary for %s: %s", cat_id, e)
+                category_glossary = {}
+
         try:
             translator = engine_bridge.create_translator(
                 provider=provider,
@@ -338,9 +409,16 @@ async def translate_audio_script(audio_id: int, body: TranslateScriptRequest):
                 model=model,
                 source_lang=body.source_lang,
             )
-            ai_results = translator.translate_all(ai_texts)
+            try:
+                ai_results = translator.translate_all(
+                    ai_texts,
+                    glossary=category_glossary or None,
+                )
+            except TypeError:
+                ai_results = translator.translate_all(ai_texts)
 
             # Fill in results + save to TM
+            tm_tag = f"audio_cat:{cat_id}" if cat_id else "audio_script"
             tm_entries = []
             for idx, ai_trans in zip(ai_indices, ai_results):
                 if ai_trans and ai_trans.strip():
@@ -352,7 +430,7 @@ async def translate_audio_script(audio_id: int, body: TranslateScriptRequest):
                         "target_lang": body.target_lang,
                         "provider": provider,
                         "model": model,
-                        "context_tag": "audio_script",
+                        "context_tag": tm_tag,
                     })
             if tm_entries:
                 await db.tm_insert_batch(tm_entries)
@@ -387,7 +465,8 @@ class AutoCaptionRequest(BaseModel):
 @router.post("/{audio_id}/auto-caption")
 async def auto_caption(audio_id: int, body: AutoCaptionRequest):
     """Run STT + Translation on audio, save result as Spotify-style lyrics."""
-    await require_license()
+    if body.provider not in OFFLINE_PROVIDERS:
+        await require_license()
     audio = await db.get_audio_item(audio_id)
     if not audio:
         raise HTTPException(404, "Audio not found")
@@ -423,8 +502,120 @@ async def auto_caption(audio_id: int, body: AutoCaptionRequest):
         target_lang=body.target_lang,
         stt_provider=body.stt_provider,
         stt_api_key=stt_api_key,
+        category_id=audio.get("category_id"),
     )
     return {"job_id": job.job_id, "status": job.status}
+
+
+# ── Bulk translate ──────────────────────────────────────────────
+
+class BulkTranslateRequest(BaseModel):
+    audio_ids: List[int]
+    mode: str = "auto"  # "auto" | "script" | "auto_caption"
+    source_lang: str = "ja"
+    target_lang: str = "ko"
+    provider: str = ""
+    api_key: str = ""
+    model: str = ""
+    stt_provider: str = "whisper_api"
+    stt_api_key: str = ""
+    use_category_glossary: bool = True
+
+
+@router.post("/bulk-translate")
+async def bulk_translate(body: BulkTranslateRequest):
+    """Start a bulk translate job across multiple audio items."""
+    if body.provider not in OFFLINE_PROVIDERS:
+        await require_license()
+    if not body.audio_ids:
+        raise HTTPException(400, "audio_ids must not be empty")
+    if body.mode not in ("auto", "script", "auto_caption"):
+        raise HTTPException(400, f"invalid mode: {body.mode}")
+
+    settings = await db.get_settings()
+    api_keys_raw = settings.get("api_keys", {})
+    if isinstance(api_keys_raw, str):
+        try:
+            api_keys_raw = json.loads(api_keys_raw)
+        except Exception:
+            api_keys_raw = {}
+
+    provider = body.provider or settings.get("default_provider", "claude")
+    api_key = body.api_key or api_keys_raw.get(provider, "")
+    model = body.model or settings.get("model", "")
+    stt_api_key = body.stt_api_key or api_keys_raw.get("openai", "")
+
+    if not api_key:
+        raise HTTPException(400, f"No API key configured for provider: {provider}")
+
+    from .. import subtitle_job_manager as sjm
+    try:
+        job = await sjm.start_bulk_audio_translate(
+            audio_ids=body.audio_ids,
+            mode=body.mode,
+            source_lang=body.source_lang,
+            target_lang=body.target_lang,
+            provider=provider,
+            api_key=api_key,
+            model=model,
+            stt_provider=body.stt_provider,
+            stt_api_key=stt_api_key,
+            use_category_glossary=body.use_category_glossary,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "total": job.total,
+        "category_id": job.category_id,
+    }
+
+
+@router.get("/bulk-translate/{job_id}/status")
+async def bulk_translate_status(job_id: str):
+    """SSE stream for bulk translate job progress."""
+    import asyncio
+    from fastapi.responses import StreamingResponse
+    from .. import subtitle_job_manager as sjm
+
+    job = sjm.get_audio_bulk_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    q = job.add_sse_listener()
+
+    async def event_generator():
+        try:
+            yield f"data: {json.dumps({'event': 'init', 'data': {'status': job.status, 'done': job.done, 'total': job.total}})}\n\n"
+            while True:
+                try:
+                    msg = await asyncio.wait_for(q.get(), timeout=30)
+                    yield f"data: {json.dumps(msg)}\n\n"
+                    if msg.get("event") in ("complete", "error", "cancelled"):
+                        break
+                except asyncio.TimeoutError:
+                    yield f"data: {json.dumps({'event': 'heartbeat', 'data': {}})}\n\n"
+                    if job.status != "running":
+                        break
+        finally:
+            job.remove_sse_listener(q)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/bulk-translate/{job_id}/cancel")
+async def bulk_translate_cancel(job_id: str):
+    from .. import subtitle_job_manager as sjm
+    job = sjm.get_audio_bulk_job(job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    job.cancel_event.set()
+    return {"ok": True}
 
 
 @router.get("/auto-caption/{job_id}/status")

@@ -683,13 +683,113 @@ def find_game_exe(game_path: str) -> Optional[str]:
     return str(candidates[0])
 
 
+def _find_leproc() -> Optional[str]:
+    """Find LEProc.exe on the system. Returns path or None.
+
+    Search order:
+    1. Env var GT_LEPROC_PATH (user override)
+    2. PATH
+    3. Common install locations
+    4. Registry: shell command for .le.config
+    """
+    env_override = os.environ.get("GT_LEPROC_PATH", "").strip()
+    if env_override and os.path.isfile(env_override):
+        return env_override
+
+    # PATH search
+    try:
+        from shutil import which
+        p = which("LEProc.exe") or which("LEProc")
+        if p:
+            return p
+    except Exception:
+        pass
+
+    # Common locations
+    candidates = [
+        r"C:\Program Files\Locale Emulator\LEProc.exe",
+        r"C:\Program Files (x86)\Locale Emulator\LEProc.exe",
+        os.path.expanduser(r"~\Desktop\LE\LEProc.exe"),
+        os.path.expanduser(r"~\AppData\Local\Locale Emulator\LEProc.exe"),
+        r"C:\Tools\LocaleEmulator\LEProc.exe",
+        r"C:\LocaleEmulator\LEProc.exe",
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+
+    # Registry: HKCR\.le.config -> shell\open\command
+    if sys.platform == "win32":
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, r".le.config\shell\open\command") as k:
+                cmd, _ = winreg.QueryValueEx(k, None)
+                # Format: "C:\path\LEProc.exe" "%1"
+                m = re.match(r'^"?([^"]+LEProc\.exe)"?', cmd, re.IGNORECASE)
+                if m and os.path.isfile(m.group(1)):
+                    return m.group(1)
+        except (OSError, FileNotFoundError):
+            pass
+
+    return None
+
+
+def _needs_locale_emulator(exe_path: str) -> Optional[str]:
+    """Check if game requires Locale Emulator. Returns .le.config path if found, else None.
+
+    A Wolf RPG / RPGM2003 / older DXLib game typically ships with Game.exe.le.config
+    next to the executable. Presence of this file is the definitive signal.
+    """
+    p = Path(exe_path)
+    config = p.parent / f"{p.name}.le.config"
+    if config.is_file():
+        return str(config)
+    return None
+
+
 def launch_game(exe_path: str) -> None:
-    """Launch game executable."""
-    kwargs: dict = {"cwd": str(Path(exe_path).parent)}
+    """Launch game executable.
+
+    On Windows, if a `.le.config` sibling exists (Wolf RPG / RPGM2003 etc. that
+    requires Japanese ACP), automatically wrap launch with Locale Emulator
+    (LEProc.exe). Falls back to direct launch with a warning if LEProc not found.
+    """
+    cwd = str(Path(exe_path).parent)
+    kwargs: dict = {"cwd": cwd}
     if sys.platform == "win32":
         kwargs["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         kwargs["start_new_session"] = True
+
+    if sys.platform == "win32":
+        le_config = _needs_locale_emulator(exe_path)
+        if le_config:
+            leproc = _find_leproc()
+            if leproc:
+                # Use ShellExecuteW (matches LE's right-click context menu behavior).
+                # subprocess.Popen launches LEProc in a context where its DLL injection
+                # fails with SYSTEM_REPORT on Win11. ShellExecuteW invokes via the shell
+                # which routes through LE's installed handler and UAC properly.
+                import ctypes
+                SW_SHOWNORMAL = 1
+                # LEProc accepts the target exe path as a single argument; it then
+                # auto-detects the sibling .le.config.
+                params = f'"{exe_path}"'
+                rc = ctypes.windll.shell32.ShellExecuteW(
+                    None, "open", leproc, params, cwd, SW_SHOWNORMAL
+                )
+                if rc > 32:
+                    logger.info(f"Launched via LEProc (ShellExecute): {leproc} {exe_path}")
+                    return
+                logger.warning(f"ShellExecuteW failed with code {rc}, falling back to direct launch")
+            else:
+                logger.warning(
+                    f"Game requires Locale Emulator (.le.config found at {le_config}) "
+                    f"but LEProc.exe not found. Launching directly — Japanese assets may fail to load. "
+                    f"Install Locale Emulator from https://xupefei.github.io/Locale-Emulator/ "
+                    f"or set GT_LEPROC_PATH env var."
+                )
+
     subprocess.Popen([exe_path], **kwargs)
 
 
