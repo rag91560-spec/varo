@@ -15,8 +15,8 @@ const pretendard = localFont({
 
 export const metadata: Metadata = {
   title: {
-    default: "번@역+기! - AI Game Translator",
-    template: "%s | 번@역+기!",
+    default: "Varo (게임번역기) - AI Game Translator",
+    template: "%s | Varo",
   },
   description: "AI 기반 게임 번역기. 일본어 게임을 한국어로 자동 번역합니다.",
 }

@@ -1,73 +1,145 @@
-# Game Translator (번@역+기!)
+<div align="center">
 
-> Any Japanese game, manga, or subtitle — translated into your language. AI-powered, runs locally.
+# Varo
 
-<!-- ![Screenshot](docs/screenshot.png) -->
-<!-- TODO: Add demo GIF -->
+### AI-powered translator for Japanese games, manga & video subtitles
 
-## [Join our Discord](https://discord.gg/MxkNZJdq)
+<!-- Badges: replace URLs when project name is finalized -->
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/MxkNZJdq)
+[![Fanbox](https://img.shields.io/badge/Fanbox-Support-FF424D)](https://rag91560.fanbox.cc/)
+[![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/rag91560)
 
-## Features
+<!-- TODO: Replace with a 15s hero demo (Before → After translation, any engine) -->
+![Hero Demo](docs/hero.gif)
 
-- **Auto Engine Detection** — Scans your game folder and identifies the engine (RPG Maker, Unity, Unreal, and 14+ more)
-- **AI Translation** — Free offline translation (NLLB) included; unlock premium AI translation (Claude, OpenAI, Gemini) with a license
-- **Translation Memory** — Reuses previous translations for consistency
-- **Glossary** — Set custom rules for character names, proper nouns, etc.
-- **Translation Presets** — Save and reuse your translation settings
-- **Live Progress** — Real-time progress tracking via SSE
-- **One-Click Apply/Rollback** — Apply translations to your game and revert anytime
-- **File Structure Visualization** — View game file structure as a flowchart
-- **Auto Updates** — Built-in Electron auto-updater
+**[English](#english) · [한국어](#한국어)**
 
-## Supported Engines
+</div>
 
-17+ game engines supported:
+---
+
+<a name="english"></a>
+
+## What is this?
+
+Drop a Japanese game folder → click translate → play in your language. No manual text ripping, no fan-patch hunting, no IDE required.
+
+**Not a prototype. Used in production by Korean players — monthly active community on Discord, stable revenue, weekly engine updates.**
+
+- 🎮 **17+ game engines** auto-detected (RPG Maker, Unity, Unreal, Ren'Py, Kirikiri, Wolf RPG, and more)
+- 🤖 **Multi-AI** — Claude, GPT, Gemini, or free offline NLLB
+- 📚 **Beyond games** — manga panels, video subtitles, text scripts
+- 🔄 **Reversible** — one-click rollback to original files anytime
+- 🔐 **Local-first** — runs on your machine, no game data uploaded
+
+---
+
+## 🎥 Demo
+
+<!-- TODO: Add 3-5 short clips (~15s each). Strong contenders: RPG Maker MV, Unreal, Kirikiri, manga, subtitle -->
+
+|  |  |
+|--|--|
+| ![RPG Maker MV](docs/demo-rpgmaker.gif) | ![Unreal Engine](docs/demo-ue.gif) |
+| **RPG Maker MV** — JRPG | **Unreal Engine** — 3D game |
+| ![Kirikiri](docs/demo-kirikiri.gif) | ![Manga](docs/demo-manga.gif) |
+| **Kirikiri** — Visual novel | **Manga** — Panel-by-panel OCR |
+
+---
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| **Auto Engine Detection** | Scans any folder and identifies the engine in seconds |
+| **AI Translation** | Free offline NLLB baseline; Claude / GPT / Gemini via license |
+| **Translation Memory** | Reuses past translations for consistency across sessions |
+| **Glossary** | Lock proper nouns, character names, custom terms |
+| **Translation Presets** | Save per-game or per-engine settings, reuse instantly |
+| **Live Progress (SSE)** | Real-time translation progress in the UI |
+| **One-Click Apply / Rollback** | Apply to the game and undo anytime |
+| **File Structure Flowchart** | Visualize game file tree as an interactive flow |
+| **Auto Updates** | Electron-based, ships new engine support automatically |
+
+---
+
+## 🎯 Supported Engines
+
+17+ engines supported. Tested on production games.
 
 | Engine | Status |
 |--------|--------|
-| RPG Maker (MV, MZ, VX Ace, XP, 2000/2003) | Stable |
-| Wolf RPG Editor | Stable |
-| TyranoScript / TyranoBuilder | Stable |
-| Kirikiri (KAG3 / KS) | Stable |
-| Unity (IL2CPP / Mono) | Stable |
-| Unreal Engine | Stable |
-| Ren'Py | Stable |
-| RPG in a Box | Stable |
-| RPGM (Legacy) | Stable |
-| LiveMaker / LiveNovel | Stable |
-| SystemNNN / NScripter | Stable |
-| YU-RIS | Stable |
-| MuMu | Stable |
-| GDevelop | Beta |
-| And more... | |
+| RPG Maker (MV, MZ, VX Ace, XP, 2000/2003) | ✅ Stable |
+| Wolf RPG Editor | ✅ Stable |
+| TyranoScript / TyranoBuilder | ✅ Stable |
+| Kirikiri (KAG3 / KS) | ✅ Stable |
+| Unity (IL2CPP / Mono) | ✅ Stable |
+| Unreal Engine | ✅ Stable |
+| Ren'Py | ✅ Stable |
+| RPG in a Box | ✅ Stable |
+| LiveMaker / LiveNovel | ✅ Stable |
+| SystemNNN / NScripter | ✅ Stable |
+| YU-RIS | ✅ Stable |
+| MuMu | ✅ Stable |
+| GDevelop | 🧪 Beta |
+| …and more | ✅ Stable |
 
-## Translation Engines
+> Don't see your engine? [Open an issue](../../issues/new) or ask in [Discord](https://discord.gg/MxkNZJdq) — we add engines based on demand.
 
-### Free (Offline)
-- **NLLB** — Meta's open-source translation model. Runs locally, no license key needed.
+---
 
-### Premium (License Required)
-- **Claude, OpenAI, Gemini** — High-quality AI translation powered by leading LLMs
-- Bring your own API key — the license unlocks the translation logic built for 17+ engines
-- AI-powered context-aware translation with automatic font replacement, line-break optimization, and encoding handling
+## 🚀 Quick Start (for Players)
 
-## Pricing
+1. **Download** the latest build from [Fanbox (free public post)](https://rag91560.fanbox.cc/) or [Patreon](https://www.patreon.com/c/rag91560)
+2. **Install** — Windows installer (macOS/Linux planned)
+3. **Open** the launcher, drag your game folder, click **Translate**
+4. **Play**
+
+No license needed for offline NLLB translation. Premium AI engines require a [license](#-pricing).
+
+---
+
+## 💰 Pricing
 
 |  | Monthly | Yearly | Lifetime |
 |--|---------|--------|----------|
-| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $50 |
-| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥5,000 |
+| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
+| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
 
-**Free tier** includes offline NLLB translation — no license needed.
-**Paid tier** unlocks high-quality AI translation with Claude, Gemini, OpenAI, and more.
+- **Free tier** — offline NLLB, no license.
+- **Paid tier** — Claude / GPT / Gemini, context-aware translation, auto font replacement, line-break optimization, encoding handling across 17+ engines.
+- Yearly / Lifetime: pay once, cancel subscription anytime — license stays active for the full period.
 
-> Yearly / Lifetime: Pay once, cancel subscription — your license stays active for the full period.
+---
 
-## Download
+## 🛠 For Developers
 
-> The latest stable build is available on [Pixiv Fanbox](https://rag91560.fanbox.cc/) (free public post) or [Patreon](https://www.patreon.com/c/rag91560).
+### Prerequisites
+- Node.js 20+
+- Python 3.10+
+- npm
 
-## Tech Stack
+### Development
+```bash
+# Install dependencies
+npm install
+pip install -r backend/requirements.txt
+
+# Next.js dev server (port 3100)
+npm run dev
+
+# Electron dev (separate terminal)
+npm run electron:dev
+```
+
+### Production Build
+```bash
+npm run electron:build
+# Output → dist-electron/
+```
+
+### Tech Stack
 
 | Area | Tech |
 |------|------|
@@ -77,163 +149,87 @@
 | UI | CVA (Class Variance Authority), Lucide Icons |
 | Visualization | @xyflow/react |
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 20+
-- Python 3.10+
-- npm
-
-### Development
-
-```bash
-# Install dependencies
-npm install
-pip install -r backend/requirements.txt
-
-# Start Next.js dev server (port 3100)
-npm run dev
-
-# Start Electron in dev mode (separate terminal)
-npm run electron:dev
+### Project Structure
 ```
-
-### Production Build
-
-```bash
-# Build Windows installer
-npm run electron:build
-```
-
-Output will be in `dist-electron/`.
-
-## Project Structure
-
-```
-app/                    # Next.js pages & routing
-backend/                # Python FastAPI backend
-  routers/              # API routers (games, translate, covers, etc.)
+app/           # Next.js pages & routing
+backend/       # Python FastAPI backend
+  routers/     # API routers (games, translate, covers, etc.)
 components/
-  ui/                   # Shared UI components (CVA pattern)
-  game-detail/          # Game detail domain components
-  layout/               # Layout (Sidebar, etc.)
-electron/               # Electron main/preload
-hooks/                  # Custom React hooks
-lib/                    # Utilities (api.ts, types.ts, i18n.ts)
-scripts/                # Build scripts
+  ui/          # Shared UI components (CVA pattern)
+  game-detail/ # Game detail domain components
+  layout/      # Layout (Sidebar, etc.)
+electron/      # Electron main/preload
+hooks/         # Custom React hooks
+lib/           # Utilities (api.ts, types.ts, i18n.ts)
+scripts/       # Build scripts
 ```
 
-## License
-
-[MIT](LICENSE)
+> The translation engine itself (`ue-translator`) is proprietary and distributed with paid builds. This repo contains the launcher, UI, and engine adapters.
 
 ---
 
-<details>
-<summary>한국어 (Korean)</summary>
+## 🌐 Community & Support
 
-# 번@역+기! (byeok-gi)
+- 💬 **Discord** — [Join the server](https://discord.gg/MxkNZJdq) for support, feature requests, and game compatibility reports
+- 🐛 **Bugs & Features** — [GitHub Issues](../../issues)
+- ❤️ **Support Development** — [Fanbox](https://rag91560.fanbox.cc/) or [Patreon](https://www.patreon.com/c/rag91560)
 
-AI 기반 게임 번역 도구. 게임 파일을 자동으로 스캔하고, AI를 활용해 번역한 뒤, 원본에 적용합니다.
+Every paid license keeps the engine updated for new games. Built and maintained solo.
 
-## [디스코드 서버 참여하기](https://discord.gg/MxkNZJdq)
-
-> 제대로 작동하는 빌드된 버전을 사용하시려면 [Pixiv Fanbox](https://rag91560.fanbox.cc/)에서 다운로드하시는 것을 추천드립니다. (전체공개 게시글이므로 무료로 다운로드 가능합니다.)
-
-## 요금제
-
-|  | 월간 | 연간 | 평생 |
-|--|------|------|------|
-| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $50 |
-| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥5,000 |
-
-**무료**: NLLB 오프라인 번역 — 라이선스 불필요.
-**유료**: Claude, Gemini, OpenAI 등 고품질 AI 번역 사용 가능.
-
-> 연간 / 평생: 1회 결제 후 구독 취소해도 해당 기간 동안 라이선스가 유효합니다.
-
-## 주요 기능
-
-- **자동 엔진 감지** — 게임 폴더를 스캔하면 엔진(RPG Maker, Unity, Unreal 등)을 자동 인식
-- **AI 번역** — NLLB (오프라인 번역 모델) 기본 지원, 유료 라이선스로 Claude/OpenAI/Gemini 등 고품질 AI 번역 사용 가능
-- **번역 메모리(TM)** — 이전 번역을 재활용해 일관성 유지
-- **용어집** — 고유명사, 캐릭터명 등 번역 규칙 설정
-- **번역 프리셋** — 번역 설정을 프리셋으로 저장/재사용
-- **실시간 진행률** — SSE 기반 번역 진행 상황 실시간 표시
-- **원클릭 적용/롤백** — 번역 결과를 게임에 적용하고, 언제든 원본으로 복원
-- **파일 구조 시각화** — 게임 파일 구조를 플로우 차트로 확인
-- **자동 업데이트** — Electron 자동 업데이트 지원
-
-## 번역 엔진
-
-### 무료 (오프라인)
-- **NLLB** — Meta의 오픈소스 번역 모델. 라이선스 키 없이 로컬에서 무료 사용 가능
-
-### 유료 (라이선스 필요)
-- **Claude, OpenAI, Gemini** 등 빅테크 AI를 활용한 고품질 게임 번역 엔진
-- 17종 엔진 대응 AI 번역 로직은 한 달 넘게 개발한 부분으로, 유료 라이선스를 통해 제공됩니다
-- 라이선스 관련 문의는 [디스코드 서버](https://discord.gg/MxkNZJdq)로 부탁드립니다
-
-## 기술 스택
-
-| 영역 | 기술 |
-|------|------|
-| Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4 |
-| Desktop | Electron 35 |
-| Backend | Python FastAPI |
-| UI | CVA (Class Variance Authority), Lucide Icons |
-| 시각화 | @xyflow/react |
-
-## 설치 & 빌드
-
-### 사전 요구사항
-
-- Node.js 20+
-- Python 3.10+
-- npm
-
-### 개발 모드
-
-```bash
-# 의존성 설치
-npm install
-pip install -r backend/requirements.txt
-
-# Next.js 개발 서버 (포트 3100)
-npm run dev
-
-# Electron 개발 모드 (별도 터미널)
-npm run electron:dev
-```
-
-### 프로덕션 빌드
-
-```bash
-# Windows 인스톨러 빌드
-npm run electron:build
-```
-
-빌드 결과물은 `dist-electron/` 디렉토리에 생성됩니다.
-
-## 프로젝트 구조
-
-```
-app/                    # Next.js 페이지 & 라우팅
-backend/                # Python FastAPI 백엔드
-  routers/              # API 라우터 (games, translate, covers 등)
-components/
-  ui/                   # 공통 UI 컴포넌트 (CVA 패턴)
-  game-detail/          # 게임 상세 도메인 컴포넌트
-  layout/               # 레이아웃 (Sidebar 등)
-electron/               # Electron main/preload
-hooks/                  # 커스텀 React 훅
-lib/                    # 유틸리티 (api.ts, types.ts, i18n.ts)
-scripts/                # 빌드 스크립트
-```
+---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) — launcher, UI, and engine adapters.
+Translation engine binary (`ue-translator`) is proprietary and distributed with paid builds.
 
-</details>
+---
+
+<a name="한국어"></a>
+
+# 한국어
+
+## 이게 뭔가요?
+
+일본 게임 폴더 드래그 → 번역 클릭 → 한국어로 플레이. 수동 텍스트 추출, 비공식 패치 찾기, 개발 환경 세팅 전부 **불필요**합니다.
+
+**프로토타입 아닙니다.** 한국 유저들이 실사용 중 — 월간 활성 Discord 커뮤니티, 안정적 매출, 주간 엔진 업데이트.
+
+- 🎮 **17종 이상 게임 엔진** 자동 감지 (RPG Maker, Unity, Unreal, Ren'Py, Kirikiri, Wolf RPG 등)
+- 🤖 **멀티 AI** — Claude, GPT, Gemini, 또는 오프라인 NLLB (무료)
+- 📚 **게임 외에도** — 만화 번역(OCR), 영상 자막, 텍스트 스크립트
+- 🔄 **되돌리기 가능** — 원클릭 롤백 언제든
+- 🔐 **로컬 우선** — 게임 데이터 외부 업로드 없음
+
+## 🚀 빠른 시작 (플레이어용)
+
+1. [Fanbox (전체공개 무료)](https://rag91560.fanbox.cc/) 또는 [Patreon](https://www.patreon.com/c/rag91560)에서 최신 빌드 다운로드
+2. Windows 인스톨러 실행 (macOS/Linux 예정)
+3. 런처 실행 → 게임 폴더 드래그 → **번역** 클릭
+4. 플레이
+
+오프라인 NLLB는 라이선스 없이 무료. 프리미엄 AI 엔진은 [요금제](#-pricing) 참조.
+
+## 💰 요금제
+
+|  | 월간 | 연간 | 평생 |
+|--|------|------|------|
+| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
+| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
+
+- **무료**: NLLB 오프라인 번역 — 라이선스 불필요
+- **유료**: Claude / GPT / Gemini 등 고품질 AI, 17종 엔진 대응 컨텍스트 번역, 자동 폰트 교체, 줄바꿈 최적화, 인코딩 처리 포함
+- 연간/평생: 1회 결제 후 구독 취소해도 해당 기간 라이선스 유지
+
+## 🌐 커뮤니티 & 지원
+
+- 💬 **Discord**: [서버 참여](https://discord.gg/MxkNZJdq) — 지원, 기능 요청, 게임 호환성 리포트
+- 🐛 **버그/기능 제안**: [GitHub Issues](../../issues)
+- ❤️ **개발 지원**: [Fanbox](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560)
+
+모든 유료 라이선스는 새 게임 지원을 위한 엔진 업데이트에 쓰입니다. 1인 개발.
+
+## 라이선스
+
+[MIT](LICENSE) — 런처, UI, 엔진 어댑터.
+번역 엔진 본체(`ue-translator`)는 유료 빌드에 포함되며 별도 비공개 배포.
