@@ -1,8 +1,9 @@
-const { contextBridge, ipcRenderer } = require("electron")
+const { contextBridge, ipcRenderer, webUtils } = require("electron")
 
 contextBridge.exposeInMainWorld("electronAPI", {
   isElectron: true,
   platform: process.platform,
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("download-update"),
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   selectSubtitleFiles: () => ipcRenderer.invoke("select-subtitle-files"),
   selectVideoFiles: () => ipcRenderer.invoke("select-video-files"),
   selectVideoFolder: () => ipcRenderer.invoke("select-video-folder"),
+  selectAudioFolder: () => ipcRenderer.invoke("select-audio-folder"),
   openHtmlGame: (opts) => ipcRenderer.invoke("open-html-game", opts),
   closeHtmlGame: (opts) => ipcRenderer.invoke("close-html-game", opts),
   showConfirm: (message) => ipcRenderer.invoke("show-confirm-dialog", message),

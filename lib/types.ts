@@ -30,6 +30,7 @@ export interface GameFolder {
   name: string
   sort_order: number
   created_at: string
+  parent_id: number | null
 }
 
 export interface TranslateRequest {
@@ -366,9 +367,22 @@ export interface MediaCategory {
   name: string
   media_type: "video" | "audio" | "manga"
   sort_order: number
+  parent_id: number | null
   item_count?: number
+  glossary_json?: string
   created_at: string
   updated_at: string
+}
+
+export interface AudioBulkJobStatus {
+  status: "idle" | "running" | "completed" | "error" | "cancelled"
+  progress: number
+  done: number
+  total: number
+  current_title: string
+  error?: string
+  results?: Array<{ audio_id: number; ok: boolean; mode?: string; error?: string }>
+  item_updates?: AudioItem[]
 }
 
 // --- Manga ---
@@ -659,6 +673,7 @@ export interface LiveTranslationAPI {
 export interface ElectronAPI {
   isElectron: boolean
   platform: string
+  getPathForFile: (file: File) => string
   getAppVersion: () => Promise<string>
   checkForUpdates: () => Promise<unknown>
   downloadUpdate: () => Promise<void>
@@ -675,6 +690,7 @@ export interface ElectronAPI {
   showConfirm: (message: string) => Promise<boolean>
   selectVideoFiles: () => Promise<string[]>
   selectVideoFolder: () => Promise<string>
+  selectAudioFolder: () => Promise<string>
   registerKillHotkey: (key: string) => Promise<boolean>
   unregisterKillHotkey: () => Promise<void>
   liveTranslation: LiveTranslationAPI

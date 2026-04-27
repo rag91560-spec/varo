@@ -40,6 +40,7 @@ export function useGames(search?: string) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const hasLoadedRef = useRef(false)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), 300)
@@ -47,11 +48,13 @@ export function useGames(search?: string) {
   }, [search])
 
   const refresh = useCallback(async () => {
-    setLoading(true)
+    // Only show spinner on the very first load — subsequent refreshes keep stale content
+    if (!hasLoadedRef.current) setLoading(true)
     setError("")
     try {
       const data = await api.games.list(debouncedSearch)
       setGames(data)
+      hasLoadedRef.current = true
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load games")
     } finally {

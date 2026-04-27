@@ -490,6 +490,14 @@ ipcMain.handle("select-video-folder", async () => {
   return result.filePaths[0] || ""
 })
 
+ipcMain.handle("select-audio-folder", async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: "Select folder containing audio files",
+    properties: ["openDirectory"],
+  })
+  return result.filePaths[0] || ""
+})
+
 // HTML game window
 ipcMain.handle("open-html-game", (event, { gameId, title, serveUrl }) => {
   const existing = gameWindows.get(gameId)

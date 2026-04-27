@@ -52,6 +52,8 @@ import type {
 } from "./types"
 
 const BASE = "/api"
+// Direct backend URL for large file uploads (Next.js rewrite proxy has ~8MB body limit)
+const BACKEND = "http://localhost:8000/api"
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const { headers: extraHeaders, ...rest } = options ?? {}
@@ -92,7 +94,7 @@ export const api = {
 
     get: (id: number) => request<Game>(`/games/${id}`),
 
-    create: (data: { path: string; title?: string; engine?: string; source_lang?: string; variant_lang?: string }) =>
+    create: (data: { path: string; title?: string; engine?: string; exe_path?: string; source_lang?: string; variant_lang?: string }) =>
       request<Game>("/games", { method: "POST", body: JSON.stringify(data) }),
 
     update: (id: number, data: Partial<Game>) =>
@@ -196,7 +198,7 @@ export const api = {
     upload: async (gameId: number, file: File) => {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await fetch(`${BASE}/games/${gameId}/cover/upload`, {
+      const res = await fetch(`${BACKEND}/games/${gameId}/cover/upload`, {
         method: "POST",
         body: formData,
       })
@@ -431,11 +433,11 @@ export const api = {
     },
 
     importJson: (gameId: number, data: FormData) =>
-      fetch(`${BASE}/games/${gameId}/project/import`, { method: "POST", body: data })
+      fetch(`${BACKEND}/games/${gameId}/project/import`, { method: "POST", body: data })
         .then(r => r.json()) as Promise<ImportResult>,
 
     importCsv: (gameId: number, data: FormData) =>
-      fetch(`${BASE}/games/${gameId}/project/import/csv`, { method: "POST", body: data })
+      fetch(`${BACKEND}/games/${gameId}/project/import/csv`, { method: "POST", body: data })
         .then(r => r.json()) as Promise<ImportResult>,
   },
 
@@ -554,12 +556,18 @@ export const api = {
     delete: (id: number) =>
       request<{ ok: boolean }>(`/videos/${id}`, { method: "DELETE" }),
 
+    bulkDelete: (ids: number[]) =>
+      request<{ ok: boolean; deleted: number }>("/videos/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
+
     serveUrl: (id: number) => `${BASE}/videos/${id}/serve`,
 
     addFile: async (file: File): Promise<VideoItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/videos/upload`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/videos/upload`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -571,7 +579,7 @@ export const api = {
     uploadThumbnail: async (id: number, file: File): Promise<VideoItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/videos/${id}/thumbnail`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/videos/${id}/thumbnail`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -596,6 +604,23 @@ export const api = {
 
     cancelDownload: (jobId: string) =>
       request<{ ok: boolean }>(`/videos/download/${jobId}/cancel`, { method: "POST" }),
+
+    scanFolder: (
+      path: string,
+      opts?: { categoryId?: number | null; parentCategoryId?: number | null; preserveStructure?: boolean },
+    ) =>
+      request<{ created_items: VideoItem[]; created_categories: MediaCategory[]; total: number }>(
+        "/videos/scan-folder",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            path,
+            category_id: opts?.categoryId ?? null,
+            parent_category_id: opts?.parentCategoryId ?? null,
+            preserve_structure: opts?.preserveStructure ?? true,
+          }),
+        },
+      ),
   },
 
   audio: {
@@ -610,12 +635,18 @@ export const api = {
     delete: (id: number) =>
       request<{ ok: boolean }>(`/audio/${id}`, { method: "DELETE" }),
 
+    bulkDelete: (ids: number[]) =>
+      request<{ ok: boolean; deleted: number }>("/audio/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
+
     serveUrl: (id: number) => `${BASE}/audio/${id}/serve`,
 
     addFile: async (file: File): Promise<AudioItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/audio/upload`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/audio/upload`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -627,7 +658,7 @@ export const api = {
     uploadThumbnail: async (id: number, file: File): Promise<AudioItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/audio/${id}/thumbnail`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/audio/${id}/thumbnail`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -642,16 +673,27 @@ export const api = {
         body: JSON.stringify({ ids, category_id: categoryId }),
       }),
 
-    scanFolder: (path: string, categoryId?: number | null) =>
-      request<AudioItem[]>("/audio/scan-folder", {
-        method: "POST",
-        body: JSON.stringify({ path, category_id: categoryId ?? null }),
-      }),
+    scanFolder: (
+      path: string,
+      opts?: { categoryId?: number | null; parentCategoryId?: number | null; preserveStructure?: boolean },
+    ) =>
+      request<{ created_items: AudioItem[]; created_categories: MediaCategory[]; total: number }>(
+        "/audio/scan-folder",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            path,
+            category_id: opts?.categoryId ?? null,
+            parent_category_id: opts?.parentCategoryId ?? null,
+            preserve_structure: opts?.preserveStructure ?? true,
+          }),
+        },
+      ),
 
     uploadScript: async (id: number, file: File): Promise<AudioItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/audio/${id}/script`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/audio/${id}/script`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -676,20 +718,60 @@ export const api = {
       ),
 
     autoCaptionStatusUrl: (jobId: string) => `${BASE}/audio/auto-caption/${jobId}/status`,
+
+    bulkTranslate: (body: {
+      audio_ids: number[]
+      mode?: "auto" | "script" | "auto_caption"
+      source_lang?: string
+      target_lang?: string
+      provider?: string
+      api_key?: string
+      model?: string
+      stt_provider?: string
+      stt_api_key?: string
+      use_category_glossary?: boolean
+    }) =>
+      request<{ job_id: string; status: string; total: number; category_id: number | null }>(
+        "/audio/bulk-translate",
+        { method: "POST", body: JSON.stringify(body) },
+      ),
+
+    bulkTranslateStatusUrl: (jobId: string) => `${BASE}/audio/bulk-translate/${jobId}/status`,
+
+    bulkTranslateCancel: (jobId: string) =>
+      request<{ ok: boolean }>(`/audio/bulk-translate/${jobId}/cancel`, { method: "POST" }),
   },
 
   categories: {
     list: (mediaType?: string) =>
       request<MediaCategory[]>(`/categories${mediaType ? `?media_type=${mediaType}` : ""}`),
 
-    create: (data: { name: string; media_type: string; sort_order?: number }) =>
+    create: (data: { name: string; media_type: string; sort_order?: number; parent_id?: number | null }) =>
       request<MediaCategory>("/categories", { method: "POST", body: JSON.stringify(data) }),
 
-    update: (id: number, data: { name?: string; sort_order?: number }) =>
+    update: (id: number, data: { name?: string; sort_order?: number; parent_id?: number | null }) =>
       request<MediaCategory>(`/categories/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
     delete: (id: number) =>
       request<{ ok: boolean }>(`/categories/${id}`, { method: "DELETE" }),
+
+    ancestors: (id: number) =>
+      request<MediaCategory[]>(`/categories/${id}/ancestors`),
+
+    getGlossary: (id: number) =>
+      request<Record<string, string>>(`/categories/${id}/glossary`),
+
+    putGlossary: (id: number, glossary: Record<string, string>) =>
+      request<Record<string, string>>(`/categories/${id}/glossary`, {
+        method: "PUT",
+        body: JSON.stringify(glossary),
+      }),
+
+    patchGlossary: (id: number, terms: Record<string, string>) =>
+      request<Record<string, string>>(`/categories/${id}/glossary`, {
+        method: "PATCH",
+        body: JSON.stringify(terms),
+      }),
   },
 
   manga: {
@@ -704,6 +786,12 @@ export const api = {
 
     delete: (id: number) =>
       request<{ ok: boolean }>(`/manga/${id}`, { method: "DELETE" }),
+
+    bulkDelete: (ids: number[]) =>
+      request<{ ok: boolean; deleted: number }>("/manga/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
 
     update: (id: number, data: Partial<Pick<MangaItem, "title" | "artist" | "tags" | "category_id">>) =>
       request<MangaItem>(`/manga/${id}`, {
@@ -727,7 +815,7 @@ export const api = {
     uploadThumbnail: async (id: number, file: File): Promise<MangaItem> => {
       const form = new FormData()
       form.append("file", file)
-      const res = await fetch(`${BASE}/manga/${id}/thumbnail`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/manga/${id}/thumbnail`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -751,7 +839,7 @@ export const api = {
       const form = new FormData()
       form.append("title", title)
       files.forEach((f) => form.append("files", f))
-      const res = await fetch(`${BASE}/manga/upload`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/manga/upload`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -763,7 +851,7 @@ export const api = {
     addImages: async (id: number, files: File[]): Promise<MangaItem> => {
       const form = new FormData()
       files.forEach((f) => form.append("files", f))
-      const res = await fetch(`${BASE}/manga/${id}/images`, { method: "POST", body: form })
+      const res = await fetch(`${BACKEND}/manga/${id}/images`, { method: "POST", body: form })
       if (!res.ok) {
         let msg = `HTTP ${res.status}`
         try { const err = await res.json(); msg = err.detail || msg } catch {}
@@ -823,9 +911,9 @@ export const api = {
 
   folders: {
     list: () => request<GameFolder[]>("/folders"),
-    create: (data: { name: string }) =>
+    create: (data: { name: string; parent_id?: number | null }) =>
       request<GameFolder>("/folders", { method: "POST", body: JSON.stringify(data) }),
-    update: (id: number, data: { name?: string; sort_order?: number }) =>
+    update: (id: number, data: { name?: string; sort_order?: number; parent_id?: number | null }) =>
       request<GameFolder>(`/folders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
     delete: (id: number) =>
       request<{ ok: boolean }>(`/folders/${id}`, { method: "DELETE" }),
@@ -964,7 +1052,7 @@ export const api = {
       if (label) params.set("label", label)
       if (sourceLang) params.set("source_lang", sourceLang)
 
-      const res = await fetch(`${BASE}/subtitle/import?${params}`, {
+      const res = await fetch(`${BACKEND}/subtitle/import?${params}`, {
         method: "POST",
         body: form,
       })
