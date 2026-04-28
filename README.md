@@ -5,6 +5,7 @@
 ### AI-powered translator for Japanese games, manga & video subtitles
 
 <!-- Badges: replace URLs when project name is finalized -->
+[![Download](https://img.shields.io/badge/Download-Latest-brightgreen?style=for-the-badge)](https://api.closedclaws.com/api/download/launcher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/MxkNZJdq)
 [![Fanbox](https://img.shields.io/badge/Fanbox-Support-FF424D)](https://rag91560.fanbox.cc/)
@@ -91,10 +92,18 @@ Drop a Japanese game folder → click translate → play in your language. No ma
 
 ## 🚀 Quick Start (for Players)
 
-1. **Download** the latest build from [Fanbox (free public post)](https://rag91560.fanbox.cc/) or [Patreon](https://www.patreon.com/c/rag91560)
-2. **Install** — Windows installer (macOS/Linux planned)
-3. **Open** the launcher, drag your game folder, click **Translate**
-4. **Play**
+### ⬇️ Direct Download
+
+**[Download the latest launcher (always up-to-date)](https://api.closedclaws.com/api/download/launcher)**
+
+This link always serves the newest build — no need to refresh bookmarks after updates.
+
+Or grab it from [Fanbox (free public post)](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560).
+
+### Install
+1. **Run** the Windows installer (macOS/Linux planned)
+2. **Open** the launcher, drag your game folder, click **Translate**
+3. **Play**
 
 No license needed for offline NLLB translation. Premium AI engines require a [license](#-pricing).
 
@@ -203,10 +212,18 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 
 ## 🚀 빠른 시작 (플레이어용)
 
-1. [Fanbox (전체공개 무료)](https://rag91560.fanbox.cc/) 또는 [Patreon](https://www.patreon.com/c/rag91560)에서 최신 빌드 다운로드
-2. Windows 인스톨러 실행 (macOS/Linux 예정)
-3. 런처 실행 → 게임 폴더 드래그 → **번역** 클릭
-4. 플레이
+### ⬇️ 바로 다운로드
+
+**[최신 런처 다운로드 (항상 최신 버전)](https://api.closedclaws.com/api/download/launcher)**
+
+이 링크는 항상 최신 빌드를 자동으로 받아줍니다. 업데이트마다 링크 갱신 불필요.
+
+또는 [Fanbox (전체공개 무료)](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560)에서도 받을 수 있습니다.
+
+### 설치
+1. Windows 인스톨러 실행 (macOS/Linux 예정)
+2. 런처 실행 → 게임 폴더 드래그 → **번역** 클릭
+3. 플레이
 
 오프라인 NLLB는 라이선스 없이 무료. 프리미엄 AI 엔진은 [요금제](#-pricing) 참조.
 
