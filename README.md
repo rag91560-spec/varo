@@ -7,7 +7,7 @@
 <!-- Badges: replace URLs when project name is finalized -->
 [![Download](https://img.shields.io/badge/Download-Latest-brightgreen?style=for-the-badge)](https://api.closedclaws.com/api/download/launcher)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/MxkNZJdq)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/a6FXkPrFAZ)
 [![Fanbox](https://img.shields.io/badge/Fanbox-Support-FF424D)](https://rag91560.fanbox.cc/)
 [![Patreon](https://img.shields.io/badge/Patreon-Support-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/rag91560)
 
@@ -26,9 +26,9 @@
 
 Drop a Japanese game folder → click translate → play in your language. No manual text ripping, no fan-patch hunting, no IDE required.
 
-**Not a prototype. Used in production by Korean players — monthly active community on Discord, stable revenue, weekly engine updates.**
+**Used in production by Korean players — active Discord community, monthly recurring revenue, regular engine updates.**
 
-- 🎮 **17+ game engines** auto-detected (RPG Maker, Unity, Unreal, Ren'Py, Kirikiri, Wolf RPG, and more)
+- 🎮 **Multiple game engines** auto-detected (6 stable, 7+ beta — see table below)
 - 🤖 **Multi-AI** — Claude, GPT, Gemini, or free offline NLLB
 - 📚 **Beyond games** — manga panels, video subtitles, text scripts
 - 🔄 **Reversible** — one-click rollback to original files anytime
@@ -67,26 +67,46 @@ Drop a Japanese game folder → click translate → play in your language. No ma
 
 ## 🎯 Supported Engines
 
-17+ engines supported. Tested on production games.
+Real game testing required. Help us verify more engines.
 
 | Engine | Status |
 |--------|--------|
 | RPG Maker (MV, MZ, VX Ace, XP, 2000/2003) | ✅ Stable |
 | Wolf RPG Editor | ✅ Stable |
-| TyranoScript / TyranoBuilder | ✅ Stable |
-| Kirikiri (KAG3 / KS) | ✅ Stable |
 | Unity (IL2CPP / Mono) | ✅ Stable |
 | Unreal Engine | ✅ Stable |
-| Ren'Py | ✅ Stable |
-| RPG in a Box | ✅ Stable |
-| LiveMaker / LiveNovel | ✅ Stable |
-| SystemNNN / NScripter | ✅ Stable |
-| YU-RIS | ✅ Stable |
 | MuMu | ✅ Stable |
+| DXLib | ✅ Stable |
 | GDevelop | 🧪 Beta |
-| …and more | ✅ Stable |
+| TyranoScript / TyranoBuilder | 🧪 Beta — needs testing |
+| Kirikiri (KAG3 / KS) | 🧪 Beta — needs testing |
+| Ren'Py | 🧪 Beta — needs testing |
+| RPG in a Box | 🧪 Beta — needs testing |
+| LiveMaker / LiveNovel | 🧪 Beta — needs testing |
+| SystemNNN / NScripter | 🧪 Beta — needs testing |
+| YU-RIS | 🧪 Beta — needs testing |
 
-> Don't see your engine? [Open an issue](../../issues/new) or ask in [Discord](https://discord.gg/MxkNZJdq) — we add engines based on demand.
+> **Beta engines have parsing/translation code, but real-game testing is limited.**
+> If you have a game using one of these engines, please [open an issue](../../issues/new) or report in [Discord](https://discord.gg/a6FXkPrFAZ) — bugs get fixed as reports come in.
+
+> Don't see your engine? [Open an issue](../../issues/new) — engines are added based on demand.
+
+---
+
+## 🔬 Why this isn't a wrapper
+
+This is **not** a bundle of existing translation tools (no XUnity AutoTranslator, no RPGMakerTrans, no third-party patchers).
+Each engine required reverse-engineering its custom format from scratch:
+
+- **MuMu** — SDB byte-offset preservation, KEY30 XOR analysis
+- **DXLib** — Custom encryption analysis (Nandemoya format, 119 dialogues)
+- **Unity** — AssetBundle resize without breaking integrity (`set_raw_data + sf.save`)
+- **Unreal** — Font fallback + CJK embedding for non-CJK builds
+- **Wolf RPG** — Custom binary text extraction
+- **GDevelop** — Auto Korean font replacement
+- **RPG Maker** — Direct save data manipulation, encoding handling
+
+Built from binary analysis up. AI is used for translation quality (Claude / GPT / NLLB), not for the extraction layer.
 
 ---
 
@@ -117,7 +137,7 @@ No license needed for offline NLLB translation. Premium AI engines require a [li
 | **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
 
 - **Free tier** — offline NLLB, no license.
-- **Paid tier** — Claude / GPT / Gemini, context-aware translation, auto font replacement, line-break optimization, encoding handling across 17+ engines.
+- **Paid tier** — Claude / GPT / Gemini, context-aware translation, auto font replacement, line-break optimization, encoding handling across all supported engines.
 - Yearly / Lifetime: pay once, cancel subscription anytime — license stays active for the full period.
 
 ---
@@ -179,11 +199,11 @@ scripts/       # Build scripts
 
 ## 🌐 Community & Support
 
-- 💬 **Discord** — [Join the server](https://discord.gg/MxkNZJdq) for support, feature requests, and game compatibility reports
+- 💬 **Discord** — [Join the server](https://discord.gg/a6FXkPrFAZ) for support, feature requests, and game compatibility reports
 - 🐛 **Bugs & Features** — [GitHub Issues](../../issues)
 - ❤️ **Support Development** — [Fanbox](https://rag91560.fanbox.cc/) or [Patreon](https://www.patreon.com/c/rag91560)
 
-Every paid license keeps the engine updated for new games. Built and maintained solo.
+Every paid license keeps the engine updated for new games. Solo developer with Claude AI assistance for code.
 
 ---
 
@@ -202,13 +222,52 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 
 일본 게임 폴더 드래그 → 번역 클릭 → 한국어로 플레이. 수동 텍스트 추출, 비공식 패치 찾기, 개발 환경 세팅 전부 **불필요**합니다.
 
-**프로토타입 아닙니다.** 한국 유저들이 실사용 중 — 월간 활성 Discord 커뮤니티, 안정적 매출, 주간 엔진 업데이트.
+한국 유저 실사용 중 — 활성 Discord 커뮤니티, 정기 매출, 꾸준한 엔진 업데이트.
 
-- 🎮 **17종 이상 게임 엔진** 자동 감지 (RPG Maker, Unity, Unreal, Ren'Py, Kirikiri, Wolf RPG 등)
+- 🎮 **여러 게임 엔진** 자동 감지 (안정 6종, 베타 7종+ — 아래 표 참조)
 - 🤖 **멀티 AI** — Claude, GPT, Gemini, 또는 오프라인 NLLB (무료)
 - 📚 **게임 외에도** — 만화 번역(OCR), 영상 자막, 텍스트 스크립트
 - 🔄 **되돌리기 가능** — 원클릭 롤백 언제든
 - 🔐 **로컬 우선** — 게임 데이터 외부 업로드 없음
+
+## 🎯 지원 엔진
+
+실제 게임 테스트가 필요합니다. 베타 엔진 검증에 도움 부탁드려요.
+
+| 엔진 | 상태 |
+|--------|--------|
+| RPG Maker (MV, MZ, VX Ace, XP, 2000/2003) | ✅ 안정 |
+| Wolf RPG Editor | ✅ 안정 |
+| Unity (IL2CPP / Mono) | ✅ 안정 |
+| Unreal Engine | ✅ 안정 |
+| MuMu | ✅ 안정 |
+| DXLib | ✅ 안정 |
+| GDevelop | 🧪 베타 |
+| TyranoScript / TyranoBuilder | 🧪 베타 — 테스트 필요 |
+| Kirikiri (KAG3 / KS) | 🧪 베타 — 테스트 필요 |
+| Ren'Py | 🧪 베타 — 테스트 필요 |
+| RPG in a Box | 🧪 베타 — 테스트 필요 |
+| LiveMaker / LiveNovel | 🧪 베타 — 테스트 필요 |
+| SystemNNN / NScripter | 🧪 베타 — 테스트 필요 |
+| YU-RIS | 🧪 베타 — 테스트 필요 |
+
+> **베타 엔진은 파싱/번역 코드는 있지만 실제 게임 테스트가 부족합니다.**
+> 해당 엔진 게임 가지고 계시면 [이슈 등록](../../issues/new) 또는 [Discord](https://discord.gg/a6FXkPrFAZ)에 제보 부탁드려요. 리포트 들어오면 즉시 수정합니다.
+
+## 🔬 이게 왜 단순 통합이 아닌가
+
+기존 한패툴을 묶은 게 **아닙니다** (XUnity AutoTranslator, RPGMakerTrans 등 외부 도구 사용 X).
+각 엔진별로 자체 포맷을 분석해서 직접 추출/적용 코드를 작성:
+
+- **MuMu** — SDB 바이트 오프셋 보존, KEY30 XOR 분석
+- **DXLib** — 자체 암호화 분석 (Nandemoya 포맷, 119 다이얼로그)
+- **Unity** — AssetBundle 무결성 깨지지 않게 resize (`set_raw_data + sf.save`)
+- **Unreal** — 비-CJK 빌드에 CJK 폰트 fallback + 임베딩
+- **Wolf RPG** — 자체 바이너리 텍스트 추출
+- **GDevelop** — 한국어 자동 폰트 교체
+- **RPG Maker** — 세이브 데이터 직접 조작, 인코딩 처리
+
+바이너리 분석부터 직접 구축. AI는 번역 품질 부분에만 사용 (Claude / GPT / NLLB), 추출 레이어는 직접 작성.
 
 ## 🚀 빠른 시작 (플레이어용)
 
@@ -235,16 +294,16 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 | **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
 
 - **무료**: NLLB 오프라인 번역 — 라이선스 불필요
-- **유료**: Claude / GPT / Gemini 등 고품질 AI, 17종 엔진 대응 컨텍스트 번역, 자동 폰트 교체, 줄바꿈 최적화, 인코딩 처리 포함
+- **유료**: Claude / GPT / Gemini 등 고품질 AI, 지원 엔진 전체 대응 컨텍스트 번역, 자동 폰트 교체, 줄바꿈 최적화, 인코딩 처리 포함
 - 연간/평생: 1회 결제 후 구독 취소해도 해당 기간 라이선스 유지
 
 ## 🌐 커뮤니티 & 지원
 
-- 💬 **Discord**: [서버 참여](https://discord.gg/MxkNZJdq) — 지원, 기능 요청, 게임 호환성 리포트
+- 💬 **Discord**: [서버 참여](https://discord.gg/a6FXkPrFAZ) — 지원, 기능 요청, 게임 호환성 리포트
 - 🐛 **버그/기능 제안**: [GitHub Issues](../../issues)
 - ❤️ **개발 지원**: [Fanbox](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560)
 
-모든 유료 라이선스는 새 게임 지원을 위한 엔진 업데이트에 쓰입니다. 1인 개발.
+모든 유료 라이선스는 새 게임 지원을 위한 엔진 업데이트에 쓰입니다. 1인 개발 (Claude AI 어시스트 사용).
 
 ## 라이선스
 
