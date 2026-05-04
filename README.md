@@ -26,7 +26,8 @@
 
 Drop a Japanese game folder → click translate → play in your language. No manual text ripping, no fan-patch hunting, no IDE required.
 
-**Used in production by Korean players — active Discord community, monthly recurring revenue, regular engine updates.**
+**Free and open source (MIT).** Offline NLLB translation works out of the box, forever, with zero cost.
+If you want **higher-quality AI translation** (Claude / GPT / Gemini), an optional license is available — but it's never required.
 
 - 🎮 **Multiple game engines** auto-detected (6 stable, 7+ beta — see table below)
 - 🤖 **Multi-AI** — Claude, GPT, Gemini, or free offline NLLB
@@ -125,20 +126,9 @@ Or grab it from [Fanbox (free public post)](https://rag91560.fanbox.cc/) / [Patr
 2. **Open** the launcher, drag your game folder, click **Translate**
 3. **Play**
 
-No license needed for offline NLLB translation. Premium AI engines require a [license](#-pricing).
+**That's it — you're done.** Offline NLLB translation works without any license, no signup, no limits.
 
----
-
-## 💰 Pricing
-
-|  | Monthly | Yearly | Lifetime |
-|--|---------|--------|----------|
-| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
-| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
-
-- **Free tier** — offline NLLB, no license.
-- **Paid tier** — Claude / GPT / Gemini, context-aware translation, auto font replacement, line-break optimization, encoding handling across all supported engines.
-- Yearly / Lifetime: pay once, cancel subscription anytime — license stays active for the full period.
+If the offline translation quality isn't enough for your game and you want Claude / GPT / Gemini quality, see [Optional Premium](#-optional-premium) below.
 
 ---
 
@@ -197,13 +187,26 @@ scripts/       # Build scripts
 
 ---
 
+## 💎 Optional Premium
+
+The free offline NLLB engine handles most games. If you want **higher-quality AI translation** with full context awareness, an optional license unlocks Claude / GPT / Gemini through your own API budget covered by the engine fee.
+
+|  | Monthly | Yearly | Lifetime |
+|--|---------|--------|----------|
+| **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
+| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
+
+Think of it as an engine usage fee — keeps the project alive and funds new engine support. **Never required to use Varo.**
+
+---
+
 ## 🌐 Community & Support
 
 - 💬 **Discord** — [Join the server](https://discord.gg/a6FXkPrFAZ) for support, feature requests, and game compatibility reports
 - 🐛 **Bugs & Features** — [GitHub Issues](../../issues)
 - ❤️ **Support Development** — [Fanbox](https://rag91560.fanbox.cc/) or [Patreon](https://www.patreon.com/c/rag91560)
 
-Every paid license keeps the engine updated for new games. Solo developer with Claude AI assistance for code.
+Solo developer with Claude AI assistance for code.
 
 ---
 
@@ -222,7 +225,8 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 
 일본 게임 폴더 드래그 → 번역 클릭 → 한국어로 플레이. 수동 텍스트 추출, 비공식 패치 찾기, 개발 환경 세팅 전부 **불필요**합니다.
 
-한국 유저 실사용 중 — 활성 Discord 커뮤니티, 정기 매출, 꾸준한 엔진 업데이트.
+**무료 오픈소스 (MIT).** 오프라인 NLLB 번역은 라이선스 없이 영구 무료로 작동합니다.
+**더 좋은 품질의 AI 번역** (Claude / GPT / Gemini) 을 원하시면 선택적으로 라이선스를 결제하실 수 있지만, 의무 사항은 아닙니다.
 
 - 🎮 **여러 게임 엔진** 자동 감지 (안정 6종, 베타 7종+ — 아래 표 참조)
 - 🤖 **멀티 AI** — Claude, GPT, Gemini, 또는 오프라인 NLLB (무료)
@@ -284,18 +288,20 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 2. 런처 실행 → 게임 폴더 드래그 → **번역** 클릭
 3. 플레이
 
-오프라인 NLLB는 라이선스 없이 무료. 프리미엄 AI 엔진은 [요금제](#-pricing) 참조.
+**여기까지가 전부입니다.** 오프라인 NLLB 번역은 라이선스도, 가입도, 횟수 제한도 없이 동작합니다.
 
-## 💰 요금제
+오프라인 번역 품질이 부족한 게임이 있고 Claude / GPT / Gemini 수준 품질을 원하시면 [선택적 프리미엄](#-선택적-프리미엄) 섹션을 봐주세요.
+
+## 💎 선택적 프리미엄
+
+대부분의 게임은 무료 NLLB 엔진으로 충분합니다. 컨텍스트 인식이 필요한 **더 좋은 품질의 AI 번역**을 원하시면, 선택적으로 라이선스를 통해 Claude / GPT / Gemini를 사용할 수 있습니다.
 
 |  | 월간 | 연간 | 평생 |
 |--|------|------|------|
-| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
 | **JPY** ([Fanbox](https://rag91560.fanbox.cc/)) | ¥500 | ¥2,000 | ¥3,000 |
+| **USD** ([Patreon](https://www.patreon.com/c/rag91560)) | $5 | $20 | $30 |
 
-- **무료**: NLLB 오프라인 번역 — 라이선스 불필요
-- **유료**: Claude / GPT / Gemini 등 고품질 AI, 지원 엔진 전체 대응 컨텍스트 번역, 자동 폰트 교체, 줄바꿈 최적화, 인코딩 처리 포함
-- 연간/평생: 1회 결제 후 구독 취소해도 해당 기간 라이선스 유지
+번역 엔진 사용료라고 생각하시면 됩니다 — 프로젝트 유지비 + 신규 엔진 추가 비용으로 쓰입니다. **Varo 사용에 필수 아닙니다.**
 
 ## 🌐 커뮤니티 & 지원
 
@@ -303,7 +309,7 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 - 🐛 **버그/기능 제안**: [GitHub Issues](../../issues)
 - ❤️ **개발 지원**: [Fanbox](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560)
 
-모든 유료 라이선스는 새 게임 지원을 위한 엔진 업데이트에 쓰입니다. 1인 개발 (Claude AI 어시스트 사용).
+1인 개발 (Claude AI 어시스트 사용).
 
 ## 라이선스
 
