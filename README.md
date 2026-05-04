@@ -210,6 +210,21 @@ Solo developer with Claude AI assistance for code.
 
 ---
 
+## ⚖️ Disclaimer
+
+Varo is a **translation tool**. It does not contain, redistribute, or modify any copyrighted game content on its own.
+
+By using Varo, you agree that:
+
+- You own a **legitimate copy** of any game you translate.
+- Translation is for your **personal, private use** only.
+- You **will not redistribute, sell, or publicly share** translated game files, patches, or extracted content.
+- You are solely responsible for compliance with the game's EULA, your local copyright law, and any applicable DRM regulations.
+
+The developer assumes no liability for misuse. Copyright holders requesting removal of specific engine modules: see [LEGAL.md](LEGAL.md). Takedowns are honored within 24 hours.
+
+---
+
 ## License
 
 [MIT](LICENSE) — launcher, UI, and engine adapters.
@@ -310,6 +325,19 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 - ❤️ **개발 지원**: [Fanbox](https://rag91560.fanbox.cc/) / [Patreon](https://www.patreon.com/c/rag91560)
 
 1인 개발 (Claude AI 어시스트 사용).
+
+## ⚖️ 면책 조항
+
+Varo는 **번역 도구**입니다. 저작권이 있는 게임 콘텐츠를 자체적으로 포함하거나 재배포하지 않습니다.
+
+Varo 사용 시 다음에 동의하는 것으로 간주됩니다:
+
+- 번역하려는 게임을 **합법적으로 소유**하고 있을 것
+- 번역 결과는 **개인적·사적 용도**로만 사용할 것
+- 번역된 게임 파일, 한글 패치, 추출 콘텐츠를 **재배포·판매·공유하지 않을 것**
+- 게임 EULA, 거주국 저작권법, DRM 관련 법규 준수 책임은 **사용자 본인**에게 있음
+
+개발자는 오·남용에 대한 책임을 지지 않습니다. 권리자께서 특정 엔진 모듈 삭제를 원하실 경우 [LEGAL.md](LEGAL.md) 참조 — **24시간 내 비활성화** 처리합니다.
 
 ## 라이선스
 
