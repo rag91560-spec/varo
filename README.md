@@ -97,17 +97,17 @@ Real game testing required. Help us verify more engines.
 ## 🔬 Why this isn't a wrapper
 
 This is **not** a bundle of existing translation tools (no XUnity AutoTranslator, no RPGMakerTrans, no third-party patchers).
-Each engine required reverse-engineering its custom format from scratch:
+Each engine required dedicated parsing logic for its file format, written from the ground up for translation interoperability:
 
-- **MuMu** — SDB byte-offset preservation, KEY30 XOR analysis
-- **DXLib** — Custom encryption analysis (Nandemoya format, 119 dialogues)
-- **Unity** — AssetBundle resize without breaking integrity (`set_raw_data + sf.save`)
-- **Unreal** — Font fallback + CJK embedding for non-CJK builds
-- **Wolf RPG** — Custom binary text extraction
-- **GDevelop** — Auto Korean font replacement
-- **RPG Maker** — Direct save data manipulation, encoding handling
+- **MuMu** — Custom Japanese game format support (preserves data layout for safe text replacement)
+- **DXLib** — Custom Japanese game format support
+- **Unity** — AssetBundle text resizing with integrity preservation
+- **Unreal** — CJK font fallback + embedding for non-CJK builds
+- **Wolf RPG** — Custom binary text format support
+- **GDevelop** — Automatic CJK font replacement
+- **RPG Maker** — Native script handling with proper encoding
 
-Built from binary analysis up. AI is used for translation quality (Claude / GPT / NLLB), not for the extraction layer.
+Each adapter is purpose-built for translation only — text extraction and re-injection. AI (Claude / GPT / NLLB) is used solely for the translation step.
 
 ---
 
@@ -276,17 +276,17 @@ Translation engine binary (`ue-translator`) is proprietary and distributed with 
 ## 🔬 이게 왜 단순 통합이 아닌가
 
 기존 한패툴을 묶은 게 **아닙니다** (XUnity AutoTranslator, RPGMakerTrans 등 외부 도구 사용 X).
-각 엔진별로 자체 포맷을 분석해서 직접 추출/적용 코드를 작성:
+각 엔진별로 파일 포맷에 맞춘 전용 파싱 로직을 직접 구현 (번역 상호운용 목적):
 
-- **MuMu** — SDB 바이트 오프셋 보존, KEY30 XOR 분석
-- **DXLib** — 자체 암호화 분석 (Nandemoya 포맷, 119 다이얼로그)
-- **Unity** — AssetBundle 무결성 깨지지 않게 resize (`set_raw_data + sf.save`)
+- **MuMu** — 일본 게임 자체 포맷 지원 (텍스트 안전 교체를 위해 데이터 레이아웃 보존)
+- **DXLib** — 일본 게임 자체 포맷 지원
+- **Unity** — AssetBundle 텍스트 resize (무결성 유지)
 - **Unreal** — 비-CJK 빌드에 CJK 폰트 fallback + 임베딩
-- **Wolf RPG** — 자체 바이너리 텍스트 추출
-- **GDevelop** — 한국어 자동 폰트 교체
-- **RPG Maker** — 세이브 데이터 직접 조작, 인코딩 처리
+- **Wolf RPG** — 자체 바이너리 텍스트 포맷 지원
+- **GDevelop** — CJK 폰트 자동 교체
+- **RPG Maker** — 네이티브 스크립트 + 인코딩 처리
 
-바이너리 분석부터 직접 구축. AI는 번역 품질 부분에만 사용 (Claude / GPT / NLLB), 추출 레이어는 직접 작성.
+각 어댑터는 **번역 목적 전용** — 텍스트 추출 및 재삽입만 수행. AI(Claude / GPT / NLLB)는 번역 단계에서만 사용.
 
 ## 🚀 빠른 시작 (플레이어용)
 
