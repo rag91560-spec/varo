@@ -1,0 +1,34 @@
+# GitHub Linguist — language statistics tuning
+# Goal: reflect the actual project (TypeScript app + Python translation engine).
+# Marketing assets, generated files, and tooling scripts shouldn't count as "the project".
+
+# --- Marketing assets (Fanbox/Patreon page designs, automation) ---
+marketing/**          linguist-vendored
+marketing/**/*.html   linguist-vendored
+marketing/**/*.js     linguist-vendored
+marketing/**/*.md     linguist-documentation
+
+# --- Documentation ---
+docs/**               linguist-documentation
+*.md                  linguist-documentation
+
+# --- Build / packaging scripts (not application logic) ---
+scripts/**            linguist-vendored
+electron/**           linguist-detectable=true
+
+# --- Generated / vendored ---
+package-lock.json     linguist-generated
+*.lock                linguist-generated
+*.min.js              linguist-vendored
+*.min.css             linguist-vendored
+build/**              linguist-generated
+dist/**               linguist-generated
+dist-electron/**      linguist-generated
+dist-electron2/**     linguist-generated
+.next/**              linguist-generated
+out/**                linguist-generated
+
+# --- Line endings (Windows-friendly) ---
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
